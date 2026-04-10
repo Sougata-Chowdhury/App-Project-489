@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "828041654120",
+    "project_id": "cse489-a6988",
+    "storage_bucket": "cse489-a6988.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:828041654120:android:a9ef06db2663bc01a970dd",
+        "android_client_info": {
+          "package_name": "com.healinghands.responseforce"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCezof2L0LsuiV-hBT78DpzrwIIeqdJq5M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
