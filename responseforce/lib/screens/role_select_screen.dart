@@ -23,8 +23,8 @@ class RoleSelectScreen extends StatelessWidget {
                 'Healing Hands\nResponse Force',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 24),
               PrimaryButton(

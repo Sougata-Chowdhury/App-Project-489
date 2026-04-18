@@ -5,8 +5,8 @@ import '../state/app_state.dart';
 
 class AuthService {
   AuthService({FirebaseAuth? auth, FirebaseFirestore? db})
-      : _auth = auth ?? FirebaseAuth.instance,
-        _db = db ?? FirebaseFirestore.instance;
+    : _auth = auth ?? FirebaseAuth.instance,
+      _db = db ?? FirebaseFirestore.instance;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _db;
@@ -53,7 +53,11 @@ class AuthService {
     final finalRole = isAdmin ? AppRole.admin : expectedRole;
 
     // Ensure a user doc exists and role is set.
-    await _upsertUserDoc(uid: user.uid, email: normalizedEmail, role: finalRole);
+    await _upsertUserDoc(
+      uid: user.uid,
+      email: normalizedEmail,
+      role: finalRole,
+    );
 
     // If elder, ensure profile doc exists.
     if (finalRole == AppRole.elder) {
@@ -148,7 +152,10 @@ class AuthService {
   Future<bool> _isAdminEmail(String normalizedEmail) async {
     // Prefer Firestore-managed whitelist: admin_whitelist/{email}
     try {
-      final snap = await _db.collection('admin_whitelist').doc(normalizedEmail).get();
+      final snap = await _db
+          .collection('admin_whitelist')
+          .doc(normalizedEmail)
+          .get();
       final enabled = snap.data()?['enabled'];
       if (enabled is bool) return enabled;
       if (snap.exists) return true;

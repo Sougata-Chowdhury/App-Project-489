@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/auth_service.dart';
+import '../utils/auth_error_mapper.dart';
 import '../widgets/primary_button.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -32,7 +33,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _register() async {
-    if (_password.text != _confirm.text) {
+    final fullName = _fullName.text.trim();
+    final email = _email.text.trim();
+    final phone = _phone.text.trim();
+    final password = _password.text;
+
+    if (fullName.isEmpty) {
+      setState(() => _error = 'Please enter your full name.');
+      return;
+    }
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _error = 'Please enter a valid email.');
+      return;
+    }
+    if (phone.isEmpty) {
+      setState(() => _error = 'Please enter a phone number.');
+      return;
+    }
+    if (password.length < 6) {
+      setState(() => _error = 'Password must be at least 6 characters.');
+      return;
+    }
+    if (password != _confirm.text) {
       setState(() => _error = 'Passwords do not match.');
       return;
     }
@@ -44,14 +66,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     try {
       await context.read<AuthService>().registerElder(
-            fullName: _fullName.text,
-            email: _email.text,
-            phoneNumber: _phone.text,
-            password: _password.text,
-          );
+        fullName: fullName,
+        email: email,
+        phoneNumber: phone,
+        password: password,
+      );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = friendlyAuthError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -93,7 +115,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
               TextField(
                 controller: _confirm,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Confirm Password'),
+                decoration: const InputDecoration(
+                  labelText: 'Confirm Password',
+                ),
               ),
               const SizedBox(height: 16),
               if (_error != null) ...[

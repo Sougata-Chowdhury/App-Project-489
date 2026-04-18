@@ -13,7 +13,9 @@ import 'package:responseforce/screens/role_select_screen.dart';
 import 'package:responseforce/state/app_state.dart';
 
 void main() {
-  testWidgets('Role select shows Elder/Admin buttons', (WidgetTester tester) async {
+  testWidgets('Role select shows Elder/Admin buttons', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       ChangeNotifierProvider(
         create: (_) => AppState(),

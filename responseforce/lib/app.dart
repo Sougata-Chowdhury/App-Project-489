@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/elder_home_screen.dart';
+import 'screens/elder_setup_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/role_select_screen.dart';
 import 'services/auth_service.dart';
@@ -46,7 +47,9 @@ class _Bootstrap extends StatelessWidget {
       stream: context.read<AuthService>().authStateChanges(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         final user = snap.data;
@@ -58,7 +61,9 @@ class _Bootstrap extends StatelessWidget {
           future: context.read<AuthService>().getCurrentUserRole(user.uid),
           builder: (context, roleSnap) {
             if (roleSnap.connectionState == ConnectionState.waiting) {
-              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
             }
 
             final dbRole = roleSnap.data;
@@ -68,7 +73,15 @@ class _Bootstrap extends StatelessWidget {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 appState.setRole(dbRole);
               });
-              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            final appState = context.watch<AppState>();
+
+            if (role == AppRole.elder && !appState.elderSetupDone) {
+              return const ElderSetupScreen();
             }
 
             return MultiProvider(

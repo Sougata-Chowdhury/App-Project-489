@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../services/auth_service.dart';
 import '../state/app_state.dart';
+import '../utils/auth_error_mapper.dart';
 import '../widgets/primary_button.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
@@ -31,6 +32,18 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
+    final email = _email.text.trim();
+    final password = _password.text;
+
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _error = 'Please enter a valid email.');
+      return;
+    }
+    if (password.isEmpty) {
+      setState(() => _error = 'Please enter your password.');
+      return;
+    }
+
     setState(() {
       _busy = true;
       _error = null;
@@ -38,12 +51,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       await context.read<AuthService>().signIn(
-            email: _email.text,
-            password: _password.text,
-            expectedRole: widget.role,
-          );
+        email: email,
+        password: password,
+        expectedRole: widget.role,
+      );
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = friendlyAuthError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -79,15 +92,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 Text(_error!, style: const TextStyle(color: Colors.red)),
                 const SizedBox(height: 12),
               ],
-              PrimaryButton(
-                label: 'Login',
-                isBusy: _busy,
-                onPressed: _login,
-              ),
+              PrimaryButton(label: 'Login', isBusy: _busy, onPressed: _login),
               const SizedBox(height: 10),
               TextButton(
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const ForgotPasswordScreen(),
+                  ),
                 ),
                 child: const Text('Forgot Password?'),
               ),

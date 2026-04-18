@@ -5,22 +5,27 @@ import 'package:provider/provider.dart';
 
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import '../utils/request_type_mapper.dart';
 import '../widgets/primary_button.dart';
+import 'assistance_request_sent_screen.dart';
+import 'elder_notifications_screen.dart';
 import 'profile_screen.dart';
-import 'request_status_screen.dart';
+import 'sos_confirmation_screen.dart';
 
 class ElderHomeScreen extends StatelessWidget {
   const ElderHomeScreen({super.key});
 
   Future<void> _createRequest(BuildContext context, String type) async {
-    final ref = await context.read<FirestoreService>().createAssistanceRequest(type);
+    final ref = await context.read<FirestoreService>().createAssistanceRequest(
+      type,
+    );
     if (!context.mounted) return;
+
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => RequestStatusScreen(
-          title: 'Request Sent',
-          subtitle: 'Your $type request has been sent.',
+        builder: (_) => AssistanceRequestSentScreen(
           requestRef: ref,
+          requestTypeLabel: friendlyRequestType(type),
         ),
       ),
     );
@@ -40,6 +45,15 @@ class ElderHomeScreen extends StatelessWidget {
           appBar: AppBar(
             title: const Text('Elder Home'),
             actions: [
+              IconButton(
+                tooltip: 'Notifications',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ElderNotificationsScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.notifications),
+              ),
               IconButton(
                 tooltip: 'Profile',
                 onPressed: () => Navigator.of(context).push(
@@ -74,27 +88,11 @@ class ElderHomeScreen extends StatelessWidget {
                                 backgroundColor: Colors.red.shade700,
                                 foregroundColor: Colors.white,
                               ),
-                              onPressed: () {
-                                showDialog<void>(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                    title: const Text('Send emergency alert?'),
-                                    content: const Text(
-                                      'This will notify the Admin. (SOS location capture will be added next.)',
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.of(ctx).pop(),
-                                        child: const Text('Cancel'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => Navigator.of(ctx).pop(),
-                                        child: const Text('Confirm SOS Alert'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const SosConfirmationScreen(),
+                                ),
+                              ),
                               child: Text(
                                 'SOS',
                                 style: TextStyle(
@@ -112,14 +110,16 @@ class ElderHomeScreen extends StatelessWidget {
                           Expanded(
                             child: PrimaryButton(
                               label: 'Medicine Help',
-                              onPressed: () => _createRequest(context, 'medicine'),
+                              onPressed: () =>
+                                  _createRequest(context, 'MedicineHelp'),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: PrimaryButton(
                               label: 'Grocery Help',
-                              onPressed: () => _createRequest(context, 'grocery'),
+                              onPressed: () =>
+                                  _createRequest(context, 'GroceryHelp'),
                             ),
                           ),
                         ],
@@ -127,7 +127,8 @@ class ElderHomeScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       PrimaryButton(
                         label: 'General Assistance',
-                        onPressed: () => _createRequest(context, 'general'),
+                        onPressed: () =>
+                            _createRequest(context, 'GeneralAssistance'),
                       ),
                     ],
                   ),

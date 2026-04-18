@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/auth_service.dart';
+import '../utils/auth_error_mapper.dart';
 import '../widgets/primary_button.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -25,6 +26,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Future<void> _send() async {
+    final email = _email.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _error = 'Please enter a valid email.');
+      return;
+    }
+
     setState(() {
       _busy = true;
       _msg = null;
@@ -32,10 +39,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
 
     try {
-      await context.read<AuthService>().sendPasswordResetEmail(_email.text);
+      await context.read<AuthService>().sendPasswordResetEmail(email);
       setState(() => _msg = 'Reset link sent. Check your email.');
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = friendlyAuthError(e));
     } finally {
       setState(() => _busy = false);
     }
@@ -64,7 +71,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 Text(_error!, style: const TextStyle(color: Colors.red)),
                 const SizedBox(height: 12),
               ],
-              PrimaryButton(label: 'Send Reset Link', isBusy: _busy, onPressed: _send),
+              PrimaryButton(
+                label: 'Send Reset Link',
+                isBusy: _busy,
+                onPressed: _send,
+              ),
               const SizedBox(height: 8),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
