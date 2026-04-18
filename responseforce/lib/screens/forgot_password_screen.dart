@@ -55,33 +55,45 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              TextField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Enter email'),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Text(
+                    'Reset Password',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(labelText: 'Enter email'),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_msg != null) ...[
+                    Text(_msg!, style: const TextStyle(color: Colors.green)),
+                    const SizedBox(height: 12),
+                  ],
+                  if (_error != null) ...[
+                    Text(_error!, style: const TextStyle(color: Colors.red)),
+                    const SizedBox(height: 12),
+                  ],
+                  PrimaryButton(
+                    label: 'Send Reset Link',
+                    isBusy: _busy,
+                    onPressed: _send,
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Back to Login'),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              if (_msg != null) ...[
-                Text(_msg!, style: const TextStyle(color: Colors.green)),
-                const SizedBox(height: 12),
-              ],
-              if (_error != null) ...[
-                Text(_error!, style: const TextStyle(color: Colors.red)),
-                const SizedBox(height: 12),
-              ],
-              PrimaryButton(
-                label: 'Send Reset Link',
-                isBusy: _busy,
-                onPressed: _send,
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Back to Login'),
-              ),
-            ],
+            ),
           ),
         ),
       ),

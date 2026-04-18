@@ -19,6 +19,8 @@ class RoleSelectScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Spacer(),
+              const Icon(Icons.health_and_safety, size: 54, color: Colors.red),
+              const SizedBox(height: 10),
               Text(
                 'Healing Hands\nResponse Force',
                 textAlign: TextAlign.center,
@@ -40,7 +42,9 @@ class RoleSelectScreen extends StatelessWidget {
               Text(
                 'Please select your role to continue.',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.black54,
+                ),
               ),
               const Spacer(),
             ],

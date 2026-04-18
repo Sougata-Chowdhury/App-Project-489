@@ -62,56 +62,80 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _goBackToRoleSelect() async {
+    await context.read<AppState>().clearRole();
+  }
+
   @override
   Widget build(BuildContext context) {
     final roleLabel = widget.role == AppRole.elder ? 'Elder' : 'Admin';
 
     return Scaffold(
-      appBar: AppBar(title: Text('$roleLabel Login')),
+      appBar: AppBar(
+        title: Text('$roleLabel Login'),
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _goBackToRoleSelect,
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                autofillHints: const [AutofillHints.email],
-                decoration: const InputDecoration(labelText: 'Email'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _password,
-                obscureText: true,
-                autofillHints: const [AutofillHints.password],
-                decoration: const InputDecoration(labelText: 'Password'),
-              ),
-              const SizedBox(height: 16),
-              if (_error != null) ...[
-                Text(_error!, style: const TextStyle(color: Colors.red)),
-                const SizedBox(height: 12),
-              ],
-              PrimaryButton(label: 'Login', isBusy: _busy, onPressed: _login),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ForgotPasswordScreen(),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Sign in as $roleLabel',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                ),
-                child: const Text('Forgot Password?'),
-              ),
-              if (widget.role == AppRole.elder) ...[
-                const SizedBox(height: 4),
-                TextButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email],
+                    decoration: const InputDecoration(labelText: 'Email'),
                   ),
-                  child: const Text('Register New Account'),
-                ),
-              ],
-            ],
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _password,
+                    obscureText: true,
+                    autofillHints: const [AutofillHints.password],
+                    decoration: const InputDecoration(labelText: 'Password'),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_error != null) ...[
+                    Text(_error!, style: const TextStyle(color: Colors.red)),
+                    const SizedBox(height: 12),
+                  ],
+                  PrimaryButton(label: 'Login', isBusy: _busy, onPressed: _login),
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ForgotPasswordScreen(),
+                      ),
+                    ),
+                    child: const Text('Forgot Password?'),
+                  ),
+                  if (widget.role == AppRole.elder) ...[
+                    const SizedBox(height: 4),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                      ),
+                      child: const Text('Register New Account'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ),

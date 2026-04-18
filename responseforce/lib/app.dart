@@ -19,6 +19,7 @@ class App extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Healing Hands Response Force',
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.build(),
       builder: (context, child) {
         final mq = MediaQuery.of(context);

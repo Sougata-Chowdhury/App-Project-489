@@ -45,6 +45,16 @@ class RequestStatusScreen extends StatelessWidget {
                       ?.toDate();
                   final updatedAt = (data?['updatedAt'] as Timestamp?)
                       ?.toDate();
+                  final chipLabelColor = switch (status) {
+                    'resolved' => Colors.green.shade700,
+                    'in_progress' => Colors.orange.shade700,
+                    _ => Colors.blueGrey.shade700,
+                  };
+                  final chipLabel = switch (status) {
+                    'resolved' => 'Resolved',
+                    'in_progress' => 'In Progress',
+                    _ => 'Pending',
+                  };
 
                   return Card(
                     child: Padding(
@@ -52,12 +62,29 @@ class RequestStatusScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Status: ${status.toUpperCase()}',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              const Text(
+                                'Current Status',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Chip(
+                                label: Text(chipLabel),
+                                backgroundColor: chipLabelColor.withValues(
+                                  alpha: 0.18,
+                                ),
+                                labelStyle: TextStyle(
+                                  color: chipLabelColor,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 8),
                           if (caseTypeLabel != null)
