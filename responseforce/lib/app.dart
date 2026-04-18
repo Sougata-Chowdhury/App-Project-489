@@ -8,7 +8,6 @@ import 'screens/elder_setup_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/role_select_screen.dart';
 import 'services/auth_service.dart';
-import 'services/firestore_service.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
 
@@ -85,14 +84,9 @@ class _Bootstrap extends StatelessWidget {
               return const ElderSetupScreen();
             }
 
-            return MultiProvider(
-              providers: [
-                Provider<FirestoreService>(create: (_) => FirestoreService()),
-              ],
-              child: role == AppRole.elder
-                  ? const ElderHomeScreen()
-                  : const AdminDashboardScreen(),
-            );
+            return role == AppRole.elder
+                ? const ElderHomeScreen()
+                : const AdminDashboardScreen();
           },
         );
       },

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'app.dart';
 import 'screens/web_firebase_notice_screen.dart';
 import 'services/auth_service.dart';
+import 'services/firestore_service.dart';
 import 'state/app_state.dart';
 
 Future<void> main() async {
@@ -24,6 +25,7 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => AppState()..load()),
         Provider(create: (_) => AuthService()),
+        Provider(create: (_) => FirestoreService()),
       ],
       child: const App(),
     ),
