@@ -188,7 +188,9 @@ class FirestoreService {
         eventType: 'assistance_status_update',
         relatedRecord: ref,
         title: 'Assistance request updated',
-        body: 'New status: $newStatus',
+        body:
+            'New status: ${_statusLabel(newStatus)}'
+            '${comment != null && comment.trim().isNotEmpty ? '\nNote: ${comment.trim()}' : ''}',
       );
     }
   }
@@ -198,8 +200,8 @@ class FirestoreService {
   // ----------------------------
 
   Future<DocumentReference<Map<String, dynamic>>> createSosAlert({
-    double? latitude,
-    double? longitude,
+    required double latitude,
+    required double longitude,
   }) async {
     final now = FieldValue.serverTimestamp();
     final profile = await getElderProfileSnapshot(uid);
@@ -241,9 +243,9 @@ class FirestoreService {
       eventType: 'sos_created',
       relatedRecord: ref,
       title: 'SOS sent',
-      body: latitude != null && longitude != null
-          ? 'Location attached. Status: pending'
-          : 'No location attached. Status: pending',
+      body:
+          'Location attached (${latitude.toStringAsFixed(5)}, ${longitude.toStringAsFixed(5)}). '
+          'Status: pending',
     );
 
     return ref;
@@ -307,7 +309,9 @@ class FirestoreService {
         eventType: 'sos_status_update',
         relatedRecord: ref,
         title: 'SOS updated',
-        body: 'New status: $newStatus',
+        body:
+            'New status: ${_statusLabel(newStatus)}'
+            '${comment != null && comment.trim().isNotEmpty ? '\nNote: ${comment.trim()}' : ''}',
       );
     }
   }
@@ -353,5 +357,13 @@ class FirestoreService {
       'deliveryStatus': 'in_app',
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  String _statusLabel(String status) {
+    return switch (status) {
+      'in_progress' => 'In Progress',
+      'resolved' => 'Resolved',
+      _ => 'Pending',
+    };
   }
 }

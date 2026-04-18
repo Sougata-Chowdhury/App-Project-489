@@ -219,6 +219,16 @@ class AdminCaseDetailScreen extends StatelessWidget {
     FirestoreService service,
     String status,
   ) async {
+    final snap = await docRef.get();
+    if (!context.mounted) return;
+    final currentStatus = (snap.data()?['status'] ?? 'pending').toString();
+    if (currentStatus == status) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Already ${_statusLabel(status)}')),
+      );
+      return;
+    }
+
     final comment = await _askComment(context);
     if (!context.mounted) return;
 
