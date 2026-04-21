@@ -82,16 +82,29 @@ class _AdminSosTab extends StatelessWidget {
               at ?? DateTime.fromMillisecondsSinceEpoch(0),
             );
           });
-        if (docs.isEmpty) {
-          return const Center(child: Text('No SOS alerts.'));
-        }
-
         return ListView.separated(
           padding: const EdgeInsets.all(12),
-          itemCount: docs.length,
+          itemCount: docs.isEmpty ? 2 : docs.length + 1,
           separatorBuilder: (_, i) => const SizedBox(height: 8),
           itemBuilder: (context, i) {
-            final d = docs[i];
+            if (i == 0) {
+              return _SectionSummaryCard(
+                title: 'SOS Alerts',
+                count: docs.length,
+                filter: statusFilter,
+                icon: Icons.sos,
+                tint: Colors.red,
+              );
+            }
+            if (docs.isEmpty && i == 1) {
+              return const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('No SOS alerts for the selected filter.'),
+                ),
+              );
+            }
+            final d = docs[i - 1];
             final data = d.data();
             final status = (data['status'] ?? 'pending').toString();
             final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
@@ -101,11 +114,37 @@ class _AdminSosTab extends StatelessWidget {
 
             return Card(
               child: ListTile(
-                leading: const Icon(Icons.sos, color: Colors.red),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: Colors.red.withValues(alpha: 0.12),
+                  child: const Icon(Icons.sos, color: Colors.red),
+                ),
                 title: Text(name.isEmpty ? 'SOS Alert' : 'SOS: $name'),
-                subtitle: Text(
-                  '${_statusLabel(status)} • ${hasLoc ? 'Location' : 'No location'}'
-                  ' • ${createdAt != null ? DateFormat.yMMMd().add_jm().format(createdAt) : '—'}',
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _StatusPill(status: status),
+                        _MetaPill(
+                          icon: hasLoc ? Icons.place : Icons.location_off,
+                          label: hasLoc ? 'Location' : 'No location',
+                        ),
+                        _MetaPill(
+                          icon: Icons.schedule_outlined,
+                          label: createdAt != null
+                              ? DateFormat.yMMMd().add_jm().format(createdAt)
+                              : '—',
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
@@ -147,16 +186,31 @@ class _AdminAssistanceTab extends StatelessWidget {
               at ?? DateTime.fromMillisecondsSinceEpoch(0),
             );
           });
-        if (docs.isEmpty) {
-          return const Center(child: Text('No assistance requests.'));
-        }
-
         return ListView.separated(
           padding: const EdgeInsets.all(12),
-          itemCount: docs.length,
+          itemCount: docs.isEmpty ? 2 : docs.length + 1,
           separatorBuilder: (_, i) => const SizedBox(height: 8),
           itemBuilder: (context, i) {
-            final d = docs[i];
+            if (i == 0) {
+              return _SectionSummaryCard(
+                title: 'Assistance Requests',
+                count: docs.length,
+                filter: statusFilter,
+                icon: Icons.volunteer_activism,
+                tint: Colors.blue,
+              );
+            }
+            if (docs.isEmpty && i == 1) {
+              return const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'No assistance requests for the selected filter.',
+                  ),
+                ),
+              );
+            }
+            final d = docs[i - 1];
             final data = d.data();
             final status = (data['status'] ?? 'pending').toString();
             final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
@@ -167,14 +221,42 @@ class _AdminAssistanceTab extends StatelessWidget {
 
             return Card(
               child: ListTile(
-                leading: const Icon(Icons.volunteer_activism),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: Colors.blue.withValues(alpha: 0.12),
+                  child: const Icon(Icons.volunteer_activism),
+                ),
                 title: Text(name.isEmpty ? 'Request: $type' : '$name • $type'),
-                isThreeLine: summary.isNotEmpty,
-                subtitle: Text(
-                  '${_statusLabel(status)}'
-                  ' • $urgency'
-                  ' • ${createdAt != null ? DateFormat.yMMMd().add_jm().format(createdAt) : '—'}'
-                  '${summary.isNotEmpty ? '\n$summary' : ''}',
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _StatusPill(status: status),
+                        _MetaPill(icon: Icons.flag_outlined, label: urgency),
+                        _MetaPill(
+                          icon: Icons.schedule_outlined,
+                          label: createdAt != null
+                              ? DateFormat.yMMMd().add_jm().format(createdAt)
+                              : '—',
+                        ),
+                      ],
+                    ),
+                    if (summary.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        summary,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
@@ -190,6 +272,97 @@ class _AdminAssistanceTab extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _SectionSummaryCard extends StatelessWidget {
+  const _SectionSummaryCard({
+    required this.title,
+    required this.count,
+    required this.filter,
+    required this.icon,
+    required this.tint,
+  });
+
+  final String title;
+  final int count;
+  final String? filter;
+  final IconData icon;
+  final Color tint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: tint.withValues(alpha: 0.12),
+              child: Icon(icon, color: tint),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                  Text('$count total'),
+                ],
+              ),
+            ),
+            _MetaPill(
+              icon: Icons.filter_alt_outlined,
+              label: filter == null ? 'All' : _statusLabel(filter!),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (status) {
+      'resolved' => Colors.green.shade700,
+      'in_progress' => Colors.orange.shade700,
+      _ => Colors.blueGrey.shade700,
+    };
+    return Chip(
+      visualDensity: VisualDensity.compact,
+      label: Text(_statusLabel(status)),
+      backgroundColor: color.withValues(alpha: 0.12),
+      labelStyle: TextStyle(color: color, fontWeight: FontWeight.w700),
+      side: BorderSide(color: color.withValues(alpha: 0.22)),
+    );
+  }
+}
+
+class _MetaPill extends StatelessWidget {
+  const _MetaPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      visualDensity: VisualDensity.compact,
+      avatar: Icon(icon, size: 16),
+      label: Text(label),
     );
   }
 }

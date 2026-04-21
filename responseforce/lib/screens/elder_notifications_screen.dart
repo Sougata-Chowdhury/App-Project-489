@@ -16,7 +16,7 @@ class ElderNotificationsScreen extends StatefulWidget {
 }
 
 class _ElderNotificationsScreenState extends State<ElderNotificationsScreen> {
-  String? _filter; // pending | in_progress | resolved
+  String? _filter; // pending | in_progress
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +43,6 @@ class _ElderNotificationsScreenState extends State<ElderNotificationsScreen> {
                 PopupMenuItem(value: null, child: Text('All')),
                 PopupMenuItem(value: 'pending', child: Text('Pending')),
                 PopupMenuItem(value: 'in_progress', child: Text('In Progress')),
-                PopupMenuItem(value: 'resolved', child: Text('Resolved')),
               ],
             ),
           ],
@@ -72,6 +71,9 @@ class _RequestsTab extends StatelessWidget {
       stream: service.elderAssistanceRequestsStream(status: statusFilter),
       builder: (context, snap) {
         final docs = [...(snap.data?.docs ?? const [])]
+          ..removeWhere(
+            (d) => (d.data()['status'] ?? '').toString() == 'resolved',
+          )
           ..sort((a, b) {
             final at = (a.data()['createdAt'] as Timestamp?)?.toDate();
             final bt = (b.data()['createdAt'] as Timestamp?)?.toDate();
@@ -136,6 +138,9 @@ class _SosTab extends StatelessWidget {
       stream: service.elderSosAlertsStream(status: statusFilter),
       builder: (context, snap) {
         final docs = [...(snap.data?.docs ?? const [])]
+          ..removeWhere(
+            (d) => (d.data()['status'] ?? '').toString() == 'resolved',
+          )
           ..sort((a, b) {
             final at = (a.data()['createdAt'] as Timestamp?)?.toDate();
             final bt = (b.data()['createdAt'] as Timestamp?)?.toDate();

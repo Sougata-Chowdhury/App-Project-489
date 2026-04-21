@@ -62,16 +62,25 @@ class AdminCaseDetailScreen extends StatelessWidget {
               children: [
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Status: ${status.toUpperCase()}',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                type == CaseType.sos
+                                    ? 'SOS Incident'
+                                    : 'Assistance Case',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            _StatusPill(status: status),
+                          ],
                         ),
                         const SizedBox(height: 6),
                         Text(
@@ -99,14 +108,11 @@ class AdminCaseDetailScreen extends StatelessWidget {
                   const SizedBox(height: 12),
                   Card(
                     child: Padding(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(14),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Request Details',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
+                          const _SectionTitle('Request Details'),
                           const SizedBox(height: 8),
                           _kv(
                             'Summary',
@@ -140,14 +146,11 @@ class AdminCaseDetailScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Elder Profile (Snapshot)',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
+                        const _SectionTitle('Elder Profile (Snapshot)'),
                         const SizedBox(height: 8),
                         _kv('Name', elderName.isEmpty ? '—' : elderName),
                         _kv(
@@ -183,10 +186,7 @@ class AdminCaseDetailScreen extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 16),
-                const Text(
-                  'Update Status',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
+                const _SectionTitle('Update Status'),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -198,10 +198,7 @@ class AdminCaseDetailScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Status History',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
+                const _SectionTitle('Status History'),
                 const SizedBox(height: 8),
                 StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                   stream: service.statusHistoryStream(
@@ -359,6 +356,41 @@ Widget _kv(String k, String v) {
       ],
     ),
   );
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (status) {
+      'resolved' => Colors.green.shade700,
+      'in_progress' => Colors.orange.shade700,
+      _ => Colors.blueGrey.shade700,
+    };
+    return Chip(
+      label: Text(_statusLabel(status)),
+      backgroundColor: color.withValues(alpha: 0.14),
+      side: BorderSide(color: color.withValues(alpha: 0.22)),
+      labelStyle: TextStyle(color: color, fontWeight: FontWeight.w700),
+    );
+  }
 }
 
 String _statusLabel(String status) {
