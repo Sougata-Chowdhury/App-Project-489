@@ -162,14 +162,19 @@ class _AdminAssistanceTab extends StatelessWidget {
             final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
             final name = (data['elderName'] ?? '').toString();
             final type = friendlyRequestType((data['type'] ?? '').toString());
+            final summary = (data['summary'] ?? '').toString().trim();
+            final urgency = _urgencyLabel((data['urgency'] ?? '').toString());
 
             return Card(
               child: ListTile(
                 leading: const Icon(Icons.volunteer_activism),
                 title: Text(name.isEmpty ? 'Request: $type' : '$name • $type'),
+                isThreeLine: summary.isNotEmpty,
                 subtitle: Text(
                   '${_statusLabel(status)}'
-                  ' • ${createdAt != null ? DateFormat.yMMMd().add_jm().format(createdAt) : '—'}',
+                  ' • $urgency'
+                  ' • ${createdAt != null ? DateFormat.yMMMd().add_jm().format(createdAt) : '—'}'
+                  '${summary.isNotEmpty ? '\n$summary' : ''}',
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
@@ -194,5 +199,14 @@ String _statusLabel(String status) {
     'in_progress' => 'In Progress',
     'resolved' => 'Resolved',
     _ => 'Pending',
+  };
+}
+
+String _urgencyLabel(String raw) {
+  return switch (raw) {
+    'low' => 'Low',
+    'high' => 'High',
+    'urgent' => 'Urgent',
+    _ => 'Medium',
   };
 }

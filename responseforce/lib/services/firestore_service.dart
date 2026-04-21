@@ -74,16 +74,28 @@ class FirestoreService {
   // ----------------------------
 
   Future<DocumentReference<Map<String, dynamic>>> createAssistanceRequest(
-    String type,
-  ) async {
+    String type, {
+    String? summary,
+    String urgency = 'medium',
+    Map<String, dynamic>? details,
+    DateTime? preferredTime,
+  }) async {
     final now = FieldValue.serverTimestamp();
     final profile = await getElderProfileSnapshot(uid);
+    final normalizedUrgency = _normalizeUrgency(urgency);
+    final cleanDetails = _cleanDetailsMap(details ?? const {});
+    final effectiveSummary = _effectiveSummary(type, summary, cleanDetails);
 
     final ref = await _db.collection('assistance_requests').add({
       'uid': uid,
       // Schema-aligned field name; keep 'type' for backwards compatibility/UI.
       'request_type': type, // MedicineHelp | GroceryHelp | GeneralAssistance
       'type': type,
+      'summary': effectiveSummary,
+      'urgency': normalizedUrgency,
+      if (cleanDetails.isNotEmpty) 'details': cleanDetails,
+      if (preferredTime != null)
+        'preferredTime': Timestamp.fromDate(preferredTime),
       'status': 'pending',
       'createdAt': now,
       'updatedAt': now,
@@ -117,7 +129,11 @@ class FirestoreService {
       eventType: 'assistance_created',
       relatedRecord: ref,
       title: 'Assistance request sent',
-      body: 'Type: $type. Status: pending',
+      body: _assistanceCreateBody(
+        type: type,
+        summary: effectiveSummary,
+        urgency: normalizedUrgency,
+      ),
     );
 
     return ref;
@@ -182,6 +198,7 @@ class FirestoreService {
     // Notification log as best-effort (non-transactional)
     final snap = await ref.get();
     final targetUid = (snap.data()?['uid'] ?? '').toString();
+    final requestSummary = (snap.data()?['summary'] ?? '').toString().trim();
     if (targetUid.isNotEmpty) {
       await _createNotificationLog(
         recipientUid: targetUid,
@@ -190,6 +207,7 @@ class FirestoreService {
         title: 'Assistance request updated',
         body:
             'New status: ${_statusLabel(newStatus)}'
+            '${requestSummary.isNotEmpty ? '\nRequest: $requestSummary' : ''}'
             '${comment != null && comment.trim().isNotEmpty ? '\nNote: ${comment.trim()}' : ''}',
       );
     }
@@ -365,5 +383,91 @@ class FirestoreService {
       'resolved' => 'Resolved',
       _ => 'Pending',
     };
+  }
+
+  String _normalizeUrgency(String raw) {
+    final value = raw.trim().toLowerCase();
+    return switch (value) {
+      'low' => 'low',
+      'high' => 'high',
+      'urgent' => 'urgent',
+      _ => 'medium',
+    };
+  }
+
+  Map<String, dynamic> _cleanDetailsMap(Map<String, dynamic> raw) {
+    final cleaned = <String, dynamic>{};
+    for (final entry in raw.entries) {
+      final key = entry.key.trim();
+      if (key.isEmpty) continue;
+      final value = entry.value;
+      if (value == null) continue;
+      if (value is String) {
+        final v = value.trim();
+        if (v.isEmpty) continue;
+        cleaned[key] = v;
+        continue;
+      }
+      if (value is List) {
+        final normalized = value
+            .map((e) => e?.toString().trim() ?? '')
+            .where((e) => e.isNotEmpty)
+            .toList();
+        if (normalized.isEmpty) continue;
+        cleaned[key] = normalized;
+        continue;
+      }
+      cleaned[key] = value;
+    }
+    return cleaned;
+  }
+
+  String _effectiveSummary(
+    String type,
+    String? summary,
+    Map<String, dynamic> details,
+  ) {
+    final provided = (summary ?? '').trim();
+    if (provided.isNotEmpty) return provided;
+
+    final category = _requestTypeLabel(type);
+    if (details.isEmpty) return '$category request';
+    final first = details.entries.first;
+    return '$category: ${first.value}';
+  }
+
+  String _requestTypeLabel(String raw) {
+    final value = raw.trim();
+    return switch (value) {
+      'MedicineHelp' || 'medicine' => 'Medicine Help',
+      'GroceryHelp' || 'grocery' => 'Grocery Help',
+      'GeneralAssistance' || 'general' => 'General Assistance',
+      _ => value,
+    };
+  }
+
+  String _urgencyLabel(String status) {
+    return switch (status) {
+      'low' => 'Low',
+      'high' => 'High',
+      'urgent' => 'Urgent',
+      _ => 'Medium',
+    };
+  }
+
+  String _assistanceCreateBody({
+    required String type,
+    required String summary,
+    required String urgency,
+  }) {
+    final lines = <String>[
+      'Type: ${_requestTypeLabel(type)}',
+      'Status: pending',
+      'Urgency: ${_urgencyLabel(urgency)}',
+    ];
+    if (summary.trim().isNotEmpty) {
+      lines.insert(1, 'Request: ${summary.trim()}');
+    }
+    return lines.join('\n');
   }
 }

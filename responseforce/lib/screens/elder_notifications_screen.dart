@@ -92,13 +92,17 @@ class _RequestsTab extends StatelessWidget {
             final data = d.data();
             final status = (data['status'] ?? 'pending').toString();
             final type = friendlyRequestType((data['type'] ?? '').toString());
+            final summary = (data['summary'] ?? '').toString().trim();
+            final urgency = _urgencyLabel((data['urgency'] ?? '').toString());
             final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
 
             return Card(
               child: ListTile(
                 title: Text('Help: ${type.toUpperCase()}'),
+                isThreeLine: summary.isNotEmpty,
                 subtitle: Text(
-                  '${_statusLabel(status)} • ${createdAt != null ? DateFormat.yMMMd().add_jm().format(createdAt) : '—'}',
+                  '${_statusLabel(status)} • ${createdAt != null ? DateFormat.yMMMd().add_jm().format(createdAt) : '—'}'
+                  '${summary.isNotEmpty ? '\n$urgency • $summary' : ''}',
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
@@ -250,5 +254,14 @@ String _statusLabel(String status) {
     'in_progress' => 'In Progress',
     'resolved' => 'Resolved',
     _ => 'Pending',
+  };
+}
+
+String _urgencyLabel(String status) {
+  return switch (status) {
+    'low' => 'Low',
+    'high' => 'High',
+    'urgent' => 'Urgent',
+    _ => 'Medium',
   };
 }

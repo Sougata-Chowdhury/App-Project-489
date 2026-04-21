@@ -48,6 +48,14 @@ class AdminCaseDetailScreen extends StatelessWidget {
 
             final lat = (data['latitude'] as num?)?.toDouble();
             final lng = (data['longitude'] as num?)?.toDouble();
+            final requestSummary = (data['summary'] ?? '').toString().trim();
+            final requestUrgency = (data['urgency'] ?? '').toString();
+            final preferredTime = (data['preferredTime'] as Timestamp?)
+                ?.toDate();
+            final rawDetails = data['details'];
+            final requestDetails = rawDetails is Map
+                ? rawDetails.map((k, v) => MapEntry(k.toString(), v))
+                : <String, dynamic>{};
 
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -87,6 +95,48 @@ class AdminCaseDetailScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (type == CaseType.assistance) ...[
+                  const SizedBox(height: 12),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Request Details',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 8),
+                          _kv(
+                            'Summary',
+                            requestSummary.isEmpty ? '—' : requestSummary,
+                          ),
+                          _kv('Urgency', _urgencyLabel(requestUrgency)),
+                          if (preferredTime != null)
+                            _kv(
+                              'Preferred Time',
+                              DateFormat.yMMMd().add_jm().format(preferredTime),
+                            ),
+                          if (requestDetails.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            const Text(
+                              'Structured Fields',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 6),
+                            ...requestDetails.entries.map(
+                              (e) => _kv(
+                                _prettyLabel(e.key),
+                                _displayValue(e.value),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Card(
                   child: Padding(
@@ -317,4 +367,40 @@ String _statusLabel(String status) {
     'resolved' => 'Resolved',
     _ => 'Pending',
   };
+}
+
+String _urgencyLabel(String status) {
+  return switch (status) {
+    'low' => 'Low',
+    'high' => 'High',
+    'urgent' => 'Urgent',
+    _ => 'Medium',
+  };
+}
+
+String _prettyLabel(String key) {
+  final cleaned = key
+      .replaceAll('_', ' ')
+      .replaceAllMapped(RegExp(r'(?<=[a-z])(?=[A-Z])'), (_) => ' ')
+      .trim();
+  if (cleaned.isEmpty) return key;
+  return cleaned[0].toUpperCase() + cleaned.substring(1);
+}
+
+String _displayValue(dynamic value) {
+  if (value == null) return '—';
+  if (value is List) {
+    final out = value
+        .map((e) => e.toString().trim())
+        .where((e) => e.isNotEmpty);
+    return out.isEmpty ? '—' : out.join(', ');
+  }
+  if (value is Map) {
+    final entries = value.entries
+        .map((e) => '${_prettyLabel(e.key.toString())}: ${e.value}')
+        .toList();
+    return entries.isEmpty ? '—' : entries.join(' | ');
+  }
+  final text = value.toString().trim();
+  return text.isEmpty ? '—' : text;
 }

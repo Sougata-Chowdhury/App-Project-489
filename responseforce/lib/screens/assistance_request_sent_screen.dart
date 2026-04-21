@@ -9,10 +9,12 @@ class AssistanceRequestSentScreen extends StatelessWidget {
     super.key,
     required this.requestRef,
     required this.requestTypeLabel,
+    this.requestSummary,
   });
 
   final DocumentReference<Map<String, dynamic>> requestRef;
   final String requestTypeLabel;
+  final String? requestSummary;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +34,7 @@ class AssistanceRequestSentScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const Text(
-                        'Emergency Alert Sent!',
+                        'Assistance Request Sent',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
@@ -44,6 +46,14 @@ class AssistanceRequestSentScreen extends StatelessWidget {
                             ? 'Your request has been sent.'
                             : 'Your $requestTypeLabel request has been sent.',
                       ),
+                      if (requestSummary != null &&
+                          requestSummary!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Summary: ${requestSummary!.trim()}',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       PrimaryButton(
                         label: 'OK',

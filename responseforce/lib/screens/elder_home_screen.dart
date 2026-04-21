@@ -4,32 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/auth_service.dart';
-import '../services/firestore_service.dart';
-import '../utils/request_type_mapper.dart';
-import '../widgets/primary_button.dart';
-import 'assistance_request_sent_screen.dart';
 import 'elder_notifications_screen.dart';
+import 'general_assistance_screen.dart';
+import 'grocery_help_screen.dart';
+import 'medicine_help_screen.dart';
 import 'profile_screen.dart';
 import 'sos_confirmation_screen.dart';
 
 class ElderHomeScreen extends StatelessWidget {
   const ElderHomeScreen({super.key});
-
-  Future<void> _createRequest(BuildContext context, String type) async {
-    final ref = await context.read<FirestoreService>().createAssistanceRequest(
-      type,
-    );
-    if (!context.mounted) return;
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => AssistanceRequestSentScreen(
-          requestRef: ref,
-          requestTypeLabel: friendlyRequestType(type),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -132,35 +115,39 @@ class ElderHomeScreen extends StatelessWidget {
                           padding: const EdgeInsets.all(12),
                           child: Column(
                             children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: PrimaryButton(
-                                      label: 'Medicine Help',
-                                      onPressed: () => _createRequest(
-                                        context,
-                                        'MedicineHelp',
-                                      ),
-                                    ),
+                              _AssistanceActionTile(
+                                title: 'Medicine Help',
+                                subtitle:
+                                    'Request medicine pickup or pharmacy support.',
+                                icon: Icons.medication_outlined,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const MedicineHelpScreen(),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: PrimaryButton(
-                                      label: 'Grocery Help',
-                                      onPressed: () => _createRequest(
-                                        context,
-                                        'GroceryHelp',
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
-                              const SizedBox(height: 12),
-                              PrimaryButton(
-                                label: 'General Assistance',
-                                onPressed: () => _createRequest(
-                                  context,
-                                  'GeneralAssistance',
+                              const SizedBox(height: 10),
+                              _AssistanceActionTile(
+                                title: 'Grocery Help',
+                                subtitle:
+                                    'Send grocery list and delivery instructions.',
+                                icon: Icons.local_grocery_store_outlined,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const GroceryHelpScreen(),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              _AssistanceActionTile(
+                                title: 'General Assistance',
+                                subtitle: 'Describe any other help you need.',
+                                icon: Icons.support_agent_outlined,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const GeneralAssistanceScreen(),
+                                  ),
                                 ),
                               ),
                             ],
@@ -175,6 +162,65 @@ class ElderHomeScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _AssistanceActionTile extends StatelessWidget {
+  const _AssistanceActionTile({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Ink(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withValues(alpha: 0.7),
+              child: Icon(icon),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(subtitle),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+      ),
     );
   }
 }
