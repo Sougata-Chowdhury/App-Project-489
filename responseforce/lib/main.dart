@@ -7,6 +7,7 @@ import 'app.dart';
 import 'screens/web_firebase_notice_screen.dart';
 import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
+import 'services/local_reminder_service.dart';
 import 'state/app_state.dart';
 
 Future<void> main() async {
@@ -19,6 +20,8 @@ Future<void> main() async {
   }
 
   await Firebase.initializeApp();
+  final localReminderService = LocalReminderService();
+  await localReminderService.initialize();
 
   runApp(
     MultiProvider(
@@ -26,6 +29,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => AppState()..load()),
         Provider(create: (_) => AuthService()),
         Provider(create: (_) => FirestoreService()),
+        Provider<LocalReminderService>.value(value: localReminderService),
       ],
       child: const App(),
     ),

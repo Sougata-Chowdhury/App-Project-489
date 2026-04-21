@@ -5,10 +5,12 @@ import 'package:latlong2/latlong.dart';
 class LocationPickerScreen extends StatefulWidget {
   const LocationPickerScreen({
     super.key,
+    this.title = 'Pick Location',
     this.initialLatitude,
     this.initialLongitude,
   });
 
+  final String title;
   final double? initialLatitude;
   final double? initialLongitude;
 
@@ -31,7 +33,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Pick SOS Location')),
+      appBar: AppBar(title: Text(widget.title)),
       body: Column(
         children: [
           Expanded(

@@ -114,7 +114,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text(_error!, style: const TextStyle(color: Colors.red)),
                     const SizedBox(height: 12),
                   ],
-                  PrimaryButton(label: 'Login', isBusy: _busy, onPressed: _login),
+                  PrimaryButton(
+                    label: 'Login',
+                    isBusy: _busy,
+                    onPressed: _login,
+                  ),
                   const SizedBox(height: 10),
                   TextButton(
                     onPressed: () => Navigator.of(context).push(
@@ -128,7 +132,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 4),
                     TextButton(
                       onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterScreen(),
+                        ),
                       ),
                       child: const Text('Register New Account'),
                     ),

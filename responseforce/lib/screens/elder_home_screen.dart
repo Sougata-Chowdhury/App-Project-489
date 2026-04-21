@@ -7,7 +7,9 @@ import '../services/auth_service.dart';
 import 'elder_notifications_screen.dart';
 import 'general_assistance_screen.dart';
 import 'grocery_help_screen.dart';
+import 'medication_reminder_screen.dart';
 import 'medicine_help_screen.dart';
+import 'nearby_resources_screen.dart';
 import 'profile_screen.dart';
 import 'sos_confirmation_screen.dart';
 
@@ -151,6 +153,41 @@ class ElderHomeScreen extends StatelessWidget {
                                 ),
                               ),
                             ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: _AssistanceActionTile(
+                            title: 'Medication & Reminders',
+                            subtitle:
+                                'Set routine reminders and log taken/missed doses.',
+                            icon: Icons.alarm,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const MedicationReminderScreen(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: _AssistanceActionTile(
+                            title: 'Find Nearby',
+                            subtitle:
+                                'Hospitals, pharmacies and police near your location.',
+                            icon: Icons.place_outlined,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const NearbyResourcesScreen(),
+                              ),
+                            ),
                           ),
                         ),
                       ),

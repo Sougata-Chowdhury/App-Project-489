@@ -23,7 +23,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final service = context.read<FirestoreService>();
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Admin Dashboard'),
@@ -49,6 +49,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             tabs: [
               Tab(text: 'SOS Alerts'),
               Tab(text: 'Assistance'),
+              Tab(text: 'Medication Logs'),
             ],
           ),
         ),
@@ -56,6 +57,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           children: [
             _AdminSosTab(service: service, statusFilter: _filter),
             _AdminAssistanceTab(service: service, statusFilter: _filter),
+            _AdminMedicationTab(service: service),
           ],
         ),
       ),
@@ -276,6 +278,134 @@ class _AdminAssistanceTab extends StatelessWidget {
   }
 }
 
+class _AdminMedicationTab extends StatelessWidget {
+  const _AdminMedicationTab({required this.service});
+
+  final FirestoreService service;
+
+  @override
+  Widget build(BuildContext context) {
+    final since = DateTime.now().subtract(const Duration(days: 14));
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: service.adminMedicationLogsStream(from: since),
+      builder: (context, snap) {
+        final docs = [...(snap.data?.docs ?? const [])]
+          ..sort((a, b) {
+            final at = (a.data()['scheduledAt'] as Timestamp?)?.toDate();
+            final bt = (b.data()['scheduledAt'] as Timestamp?)?.toDate();
+            return (bt ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
+              at ?? DateTime.fromMillisecondsSinceEpoch(0),
+            );
+          });
+
+        return ListView.separated(
+          padding: const EdgeInsets.all(12),
+          itemCount: docs.isEmpty ? 2 : docs.length + 1,
+          separatorBuilder: (_, i) => const SizedBox(height: 8),
+          itemBuilder: (context, i) {
+            if (i == 0) {
+              return _SectionSummaryCard(
+                title: 'Medication Adherence',
+                count: docs.length,
+                filter: null,
+                filterLabel: 'Last 14 days',
+                icon: Icons.medication_outlined,
+                tint: Colors.teal,
+              );
+            }
+            if (docs.isEmpty && i == 1) {
+              return const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('No medication logs yet.'),
+                ),
+              );
+            }
+
+            final data = docs[i - 1].data();
+            final elderName = (data['elderName'] ?? '').toString();
+            final medicineName = (data['medicineName'] ?? 'Medicine')
+                .toString();
+            final dosage = (data['dosage'] ?? '').toString();
+            final status = (data['status'] ?? '').toString();
+            final scheduledAt = (data['scheduledAt'] as Timestamp?)?.toDate();
+            final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
+
+            final statusColor = switch (status) {
+              'taken' => Colors.green.shade700,
+              'missed' => Colors.red.shade700,
+              _ => Colors.blueGrey.shade700,
+            };
+            final statusLabel = switch (status) {
+              'taken' => 'Taken',
+              'missed' => 'Missed',
+              _ => 'Unknown',
+            };
+
+            return Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
+                leading: CircleAvatar(
+                  backgroundColor: statusColor.withValues(alpha: 0.12),
+                  child: Icon(Icons.medication, color: statusColor),
+                ),
+                title: Text(
+                  elderName.isEmpty
+                      ? medicineName
+                      : '$elderName • $medicineName',
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        Chip(
+                          visualDensity: VisualDensity.compact,
+                          label: Text(statusLabel),
+                          backgroundColor: statusColor.withValues(alpha: 0.12),
+                          side: BorderSide(
+                            color: statusColor.withValues(alpha: 0.22),
+                          ),
+                          labelStyle: TextStyle(
+                            color: statusColor,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        _MetaPill(
+                          icon: Icons.schedule_outlined,
+                          label: scheduledAt != null
+                              ? DateFormat.yMMMd().add_jm().format(scheduledAt)
+                              : '—',
+                        ),
+                      ],
+                    ),
+                    if (dosage.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text('Dosage: $dosage'),
+                    ],
+                    if (updatedAt != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Marked: ${DateFormat.yMMMd().add_jm().format(updatedAt)}',
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
 class _SectionSummaryCard extends StatelessWidget {
   const _SectionSummaryCard({
     required this.title,
@@ -283,11 +413,13 @@ class _SectionSummaryCard extends StatelessWidget {
     required this.filter,
     required this.icon,
     required this.tint,
+    this.filterLabel,
   });
 
   final String title;
   final int count;
   final String? filter;
+  final String? filterLabel;
   final IconData icon;
   final Color tint;
 
@@ -320,7 +452,9 @@ class _SectionSummaryCard extends StatelessWidget {
             ),
             _MetaPill(
               icon: Icons.filter_alt_outlined,
-              label: filter == null ? 'All' : _statusLabel(filter!),
+              label:
+                  filterLabel ??
+                  (filter == null ? 'All' : _statusLabel(filter!)),
             ),
           ],
         ),

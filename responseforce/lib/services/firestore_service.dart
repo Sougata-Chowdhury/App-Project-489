@@ -338,6 +338,230 @@ class FirestoreService {
   // Status history & notifications
   // ----------------------------
 
+  // ----------------------------
+  // Medication routines & logs
+  // ----------------------------
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> elderMedicationRoutinesStream() {
+    return _db
+        .collection('medication_routines')
+        .where('uid', isEqualTo: uid)
+        .snapshots();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> adminMedicationRoutinesStream() {
+    return _db.collection('medication_routines').snapshots();
+  }
+
+  Future<DocumentReference<Map<String, dynamic>>> createMedicationRoutine({
+    required String medicineName,
+    String? dosage,
+    String? instructions,
+    required List<String> reminderTimes,
+    bool isActive = true,
+  }) async {
+    final profile = await getElderProfileSnapshot(uid);
+    final normalizedTimes = _normalizeReminderTimes(reminderTimes);
+    if (normalizedTimes.isEmpty) {
+      throw ArgumentError('At least one valid reminder time is required.');
+    }
+
+    final now = FieldValue.serverTimestamp();
+    final ref = await _db.collection('medication_routines').add({
+      'uid': uid,
+      'medicineName': medicineName.trim(),
+      'dosage': dosage?.trim(),
+      'instructions': instructions?.trim(),
+      'reminderTimes': normalizedTimes,
+      'isActive': isActive,
+      'createdAt': now,
+      'updatedAt': now,
+      'elderName': profile?['fullName'] ?? profile?['full_name'],
+      'elderPhone': profile?['phoneNumber'],
+    });
+
+    await _createNotificationLog(
+      recipientUid: uid,
+      eventType: 'medication_routine_created',
+      relatedRecord: ref,
+      title: 'Medication reminder saved',
+      body:
+          'Routine for ${medicineName.trim()} set at ${normalizedTimes.join(', ')}.',
+    );
+
+    return ref;
+  }
+
+  Future<void> updateMedicationRoutine({
+    required String routineId,
+    required String medicineName,
+    String? dosage,
+    String? instructions,
+    required List<String> reminderTimes,
+    required bool isActive,
+  }) async {
+    final normalizedTimes = _normalizeReminderTimes(reminderTimes);
+    if (normalizedTimes.isEmpty) {
+      throw ArgumentError('At least one valid reminder time is required.');
+    }
+
+    await _db.collection('medication_routines').doc(routineId).set({
+      'medicineName': medicineName.trim(),
+      'dosage': dosage?.trim(),
+      'instructions': instructions?.trim(),
+      'reminderTimes': normalizedTimes,
+      'isActive': isActive,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> deleteMedicationRoutine(String routineId) async {
+    await _db.collection('medication_routines').doc(routineId).delete();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> elderMedicationLogsStream({
+    DateTime? from,
+  }) {
+    final lowerBound = from ?? DateTime.now().subtract(const Duration(days: 7));
+    return _db
+        .collection('medication_logs')
+        .where('uid', isEqualTo: uid)
+        .where(
+          'scheduledAt',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(lowerBound),
+        )
+        .snapshots();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> adminMedicationLogsStream({
+    DateTime? from,
+  }) {
+    final lowerBound = from ?? DateTime.now().subtract(const Duration(days: 7));
+    return _db
+        .collection('medication_logs')
+        .where(
+          'scheduledAt',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(lowerBound),
+        )
+        .snapshots();
+  }
+
+  Future<void> setMedicationDoseStatus({
+    required String routineId,
+    required DateTime scheduledAt,
+    required String status, // taken | missed
+    String source = 'elder_manual',
+  }) async {
+    if (status != 'taken' && status != 'missed') {
+      throw ArgumentError('Status must be taken or missed.');
+    }
+
+    final routineRef = _db.collection('medication_routines').doc(routineId);
+    final routineSnap = await routineRef.get();
+    final routine = routineSnap.data();
+    if (routine == null) {
+      throw StateError('Medication routine not found.');
+    }
+
+    final normalizedScheduled = DateTime(
+      scheduledAt.year,
+      scheduledAt.month,
+      scheduledAt.day,
+      scheduledAt.hour,
+      scheduledAt.minute,
+    );
+
+    final docId = _medicationLogId(
+      uid: uid,
+      routineId: routineId,
+      scheduledAt: normalizedScheduled,
+    );
+    final logRef = _db.collection('medication_logs').doc(docId);
+
+    final medicineName = (routine['medicineName'] ?? '').toString();
+    final dosage = (routine['dosage'] ?? '').toString();
+    final elderName = (routine['elderName'] ?? '').toString();
+    final now = FieldValue.serverTimestamp();
+
+    await logRef.set({
+      'uid': uid,
+      'routineId': routineId,
+      'medicineName': medicineName,
+      'dosage': dosage,
+      'elderName': elderName,
+      'scheduledAt': Timestamp.fromDate(normalizedScheduled),
+      'scheduledDateKey': _dateKey(normalizedScheduled),
+      'scheduledTimeLabel': _timeKey(normalizedScheduled),
+      'status': status,
+      'markedBy': uid,
+      'source': source,
+      'updatedAt': now,
+      'createdAt': now,
+      'routinePath': routineRef.path,
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> markOverdueMedicationLogsAsMissed({
+    Duration grace = const Duration(minutes: 90),
+    DateTime? now,
+  }) async {
+    final moment = now ?? DateTime.now();
+    final cutoff = moment.subtract(grace);
+    final startOfDay = DateTime(moment.year, moment.month, moment.day);
+
+    final routinesSnap = await _db
+        .collection('medication_routines')
+        .where('uid', isEqualTo: uid)
+        .where('isActive', isEqualTo: true)
+        .get();
+
+    for (final doc in routinesSnap.docs) {
+      final data = doc.data();
+      final times = _normalizeReminderTimes(
+        ((data['reminderTimes'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+      );
+
+      for (final time in times) {
+        final parts = time.split(':');
+        if (parts.length != 2) continue;
+        final hour = int.tryParse(parts[0]);
+        final minute = int.tryParse(parts[1]);
+        if (hour == null || minute == null) continue;
+
+        final scheduled = DateTime(
+          startOfDay.year,
+          startOfDay.month,
+          startOfDay.day,
+          hour,
+          minute,
+        );
+
+        if (!scheduled.isBefore(cutoff)) continue;
+
+        final logRef = _db
+            .collection('medication_logs')
+            .doc(
+              _medicationLogId(
+                uid: uid,
+                routineId: doc.id,
+                scheduledAt: scheduled,
+              ),
+            );
+        final existing = await logRef.get();
+        if (existing.exists) continue;
+
+        await setMedicationDoseStatus(
+          routineId: doc.id,
+          scheduledAt: scheduled,
+          status: 'missed',
+          source: 'auto_overdue',
+        );
+      }
+    }
+  }
+
   Stream<QuerySnapshot<Map<String, dynamic>>> statusHistoryStream({
     required CaseType type,
     required String targetId,
@@ -469,5 +693,40 @@ class FirestoreService {
       lines.insert(1, 'Request: ${summary.trim()}');
     }
     return lines.join('\n');
+  }
+
+  List<String> _normalizeReminderTimes(List<String> rawTimes) {
+    final out = <String>{};
+    for (final raw in rawTimes) {
+      final value = raw.trim();
+      final parts = value.split(':');
+      if (parts.length != 2) continue;
+      final hour = int.tryParse(parts[0]);
+      final minute = int.tryParse(parts[1]);
+      if (hour == null || minute == null) continue;
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59) continue;
+      out.add(
+        '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}',
+      );
+    }
+
+    final list = out.toList()..sort();
+    return list;
+  }
+
+  String _medicationLogId({
+    required String uid,
+    required String routineId,
+    required DateTime scheduledAt,
+  }) {
+    return '${uid}_${routineId}_${_dateKey(scheduledAt)}_${_timeKey(scheduledAt)}';
+  }
+
+  String _dateKey(DateTime dt) {
+    return '${dt.year.toString().padLeft(4, '0')}${dt.month.toString().padLeft(2, '0')}${dt.day.toString().padLeft(2, '0')}';
+  }
+
+  String _timeKey(DateTime dt) {
+    return '${dt.hour.toString().padLeft(2, '0')}${dt.minute.toString().padLeft(2, '0')}';
   }
 }
