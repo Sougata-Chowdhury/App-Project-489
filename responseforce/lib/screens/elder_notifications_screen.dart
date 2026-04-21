@@ -34,24 +34,45 @@ class _ElderNotificationsScreenState extends State<ElderNotificationsScreen> {
               Tab(text: 'Updates'),
             ],
           ),
-          actions: [
-            PopupMenuButton<String?>(
-              tooltip: 'Filter',
-              initialValue: _filter,
-              onSelected: (v) => setState(() => _filter = v),
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: null, child: Text('All')),
-                PopupMenuItem(value: 'pending', child: Text('Pending')),
-                PopupMenuItem(value: 'in_progress', child: Text('In Progress')),
-              ],
-            ),
-          ],
         ),
-        body: TabBarView(
+        body: Column(
           children: [
-            _RequestsTab(service: service, statusFilter: _filter),
-            _SosTab(service: service, statusFilter: _filter),
-            _UpdatesTab(service: service),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _FilterChip(
+                      label: 'All',
+                      selected: _filter == null,
+                      onTap: () => setState(() => _filter = null),
+                    ),
+                    _FilterChip(
+                      label: 'Pending',
+                      selected: _filter == 'pending',
+                      onTap: () => setState(() => _filter = 'pending'),
+                    ),
+                    _FilterChip(
+                      label: 'In Progress',
+                      selected: _filter == 'in_progress',
+                      onTap: () => setState(() => _filter = 'in_progress'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _RequestsTab(service: service, statusFilter: _filter),
+                  _SosTab(service: service, statusFilter: _filter),
+                  _UpdatesTab(service: service),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -82,13 +103,12 @@ class _RequestsTab extends StatelessWidget {
             );
           });
         if (docs.isEmpty) {
-          return const Center(child: Text('No assistance requests yet.'));
+          return const _ListStateMessage('No assistance requests yet.');
         }
 
-        return ListView.separated(
+        return ListView.builder(
           padding: const EdgeInsets.all(12),
           itemCount: docs.length,
-          separatorBuilder: (_, i) => const SizedBox(height: 8),
           itemBuilder: (context, i) {
             final d = docs[i];
             final data = d.data();
@@ -98,23 +118,20 @@ class _RequestsTab extends StatelessWidget {
             final urgency = _urgencyLabel((data['urgency'] ?? '').toString());
             final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
 
-            return Card(
-              child: ListTile(
-                title: Text('Help: ${type.toUpperCase()}'),
-                isThreeLine: summary.isNotEmpty,
-                subtitle: Text(
-                  '${_statusLabel(status)} • ${createdAt != null ? DateFormat.yMMMd().add_jm().format(createdAt) : '—'}'
+            return _NotificationCard(
+              icon: Icons.volunteer_activism_outlined,
+              title: type,
+              status: status,
+              subtitle:
+                  '${createdAt != null ? DateFormat.yMMMd().add_jm().format(createdAt) : '—'}'
                   '${summary.isNotEmpty ? '\n$urgency • $summary' : ''}',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => RequestStatusScreen(
-                      title: 'Assistance request',
-                      subtitle: 'Type: $type',
-                      requestRef: d.reference,
-                      caseTypeLabel: 'ASSISTANCE',
-                    ),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => RequestStatusScreen(
+                    title: 'Assistance request',
+                    subtitle: 'Type: $type',
+                    requestRef: d.reference,
+                    caseTypeLabel: 'ASSISTANCE',
                   ),
                 ),
               ),
@@ -149,13 +166,12 @@ class _SosTab extends StatelessWidget {
             );
           });
         if (docs.isEmpty) {
-          return const Center(child: Text('No SOS alerts yet.'));
+          return const _ListStateMessage('No SOS alerts yet.');
         }
 
-        return ListView.separated(
+        return ListView.builder(
           padding: const EdgeInsets.all(12),
           itemCount: docs.length,
-          separatorBuilder: (_, i) => const SizedBox(height: 8),
           itemBuilder: (context, i) {
             final d = docs[i];
             final data = d.data();
@@ -164,22 +180,20 @@ class _SosTab extends StatelessWidget {
             final hasLoc =
                 data['latitude'] != null && data['longitude'] != null;
 
-            return Card(
-              child: ListTile(
-                title: const Text('SOS Alert'),
-                subtitle: Text(
-                  '${_statusLabel(status)} • ${hasLoc ? 'Location attached' : 'No location'}'
-                  ' • ${createdAt != null ? DateFormat.yMMMd().add_jm().format(createdAt) : '—'}',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => RequestStatusScreen(
-                      title: 'SOS alert',
-                      subtitle: 'Emergency case',
-                      requestRef: d.reference,
-                      caseTypeLabel: 'SOS',
-                    ),
+            return _NotificationCard(
+              icon: Icons.sos_outlined,
+              title: hasLoc ? 'SOS alert (location attached)' : 'SOS alert',
+              status: status,
+              subtitle: createdAt != null
+                  ? DateFormat.yMMMd().add_jm().format(createdAt)
+                  : '—',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => RequestStatusScreen(
+                    title: 'SOS alert',
+                    subtitle: 'Emergency case',
+                    requestRef: d.reference,
+                    caseTypeLabel: 'SOS',
                   ),
                 ),
               ),
@@ -212,19 +226,19 @@ class _UpdatesTab extends StatelessWidget {
 
         final shown = docs.take(50).toList();
         if (shown.isEmpty) {
-          return const Center(child: Text('No updates yet.'));
+          return const _ListStateMessage('No updates yet.');
         }
 
-        return ListView.separated(
+        return ListView.builder(
           padding: const EdgeInsets.all(12),
           itemCount: shown.length,
-          separatorBuilder: (_, i) => const SizedBox(height: 8),
           itemBuilder: (context, i) {
             final data = shown[i].data();
             final title = (data['title'] ?? 'Update').toString();
             final body = (data['body'] ?? '').toString();
             final ts = (data['createdAt'] as Timestamp?)?.toDate();
             return Card(
+              margin: const EdgeInsets.only(bottom: 10),
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
@@ -250,6 +264,122 @@ class _UpdatesTab extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+    );
+  }
+}
+
+class _ListStateMessage extends StatelessWidget {
+  const _ListStateMessage(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Text(message, textAlign: TextAlign.center),
+      ),
+    );
+  }
+}
+
+class _NotificationCard extends StatelessWidget {
+  const _NotificationCard({
+    required this.icon,
+    required this.title,
+    required this.status,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String status;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        leading: CircleAvatar(
+          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          child: Icon(
+            icon,
+            color: Theme.of(context).colorScheme.onPrimaryContainer,
+          ),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(subtitle),
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _StatusChip(status: status),
+            const SizedBox(height: 4),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+        onTap: onTap,
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (status) {
+      'in_progress' => Colors.orange.shade700,
+      'resolved' => Colors.green.shade700,
+      _ => Colors.blueGrey.shade700,
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: color.withValues(alpha: 0.12),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Text(
+        _statusLabel(status),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+        ),
+      ),
     );
   }
 }

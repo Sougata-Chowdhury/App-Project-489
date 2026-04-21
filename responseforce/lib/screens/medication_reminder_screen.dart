@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import '../services/firestore_service.dart';
@@ -25,6 +26,9 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
   bool _isActive = true;
   bool _isSaving = false;
   bool _isSyncingMissed = false;
+  bool _isPermissionLoading = false;
+  bool _isRequestingPermission = false;
+  ReminderPermissionStatus? _permissionStatus;
 
   String? _editingRoutineId;
   List<String> _previousReminderTimes = const [];
@@ -34,6 +38,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _syncOverdueMissed();
+      _refreshReminderPermissionStatus();
     });
   }
 
@@ -69,9 +74,12 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
   }
 
   Widget _buildRoutinesTab(FirestoreService service) {
+    final reminderService = context.read<LocalReminderService>();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _buildPermissionCard(reminderService),
+        const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -235,6 +243,88 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
           },
         ),
       ],
+    );
+  }
+
+  Widget _buildPermissionCard(LocalReminderService reminderService) {
+    final status = _permissionStatus;
+    final hasIssue = status != null && !status.allGranted;
+
+    if (!hasIssue && !_isPermissionLoading) {
+      return const SizedBox.shrink();
+    }
+
+    final theme = Theme.of(context);
+    return Card(
+      color: theme.colorScheme.errorContainer.withValues(alpha: 0.42),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Enable reminder permissions',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            if (_isPermissionLoading)
+              const LinearProgressIndicator(minHeight: 3)
+            else
+              Text(
+                'Reminders need Notification and Alarm permission. Use Enable permissions first, then open app settings if Android still blocks it.',
+                style: theme.textTheme.bodyMedium,
+              ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: _isRequestingPermission
+                      ? null
+                      : () => _requestReminderPermissions(reminderService),
+                  icon: const Icon(Icons.notifications_active_outlined),
+                  label: Text(
+                    _isRequestingPermission
+                        ? 'Requesting...'
+                        : 'Enable permissions',
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _isRequestingPermission
+                      ? null
+                      : _openAppPermissionSettings,
+                  icon: const Icon(Icons.settings_outlined),
+                  label: const Text('Open settings'),
+                ),
+              ],
+            ),
+            if (status != null) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Chip(
+                    label: Text(
+                      status.notificationsEnabled
+                          ? 'Notifications: On'
+                          : 'Notifications: Off',
+                    ),
+                  ),
+                  Chip(
+                    label: Text(
+                      status.exactAlarmsEnabled ? 'Alarms: On' : 'Alarms: Off',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -718,6 +808,50 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
     } finally {
       if (mounted) setState(() => _isSyncingMissed = false);
     }
+  }
+
+  Future<void> _refreshReminderPermissionStatus() async {
+    if (_isPermissionLoading) return;
+    setState(() => _isPermissionLoading = true);
+    try {
+      final status = await context
+          .read<LocalReminderService>()
+          .getPermissionStatus();
+      if (!mounted) return;
+      setState(() => _permissionStatus = status);
+    } finally {
+      if (mounted) setState(() => _isPermissionLoading = false);
+    }
+  }
+
+  Future<void> _requestReminderPermissions(
+    LocalReminderService reminderService,
+  ) async {
+    if (_isRequestingPermission) return;
+    setState(() => _isRequestingPermission = true);
+    try {
+      final status = await reminderService.requestPermissions();
+      if (!mounted) return;
+      setState(() => _permissionStatus = status);
+      final message = status.allGranted
+          ? 'Reminder permissions enabled.'
+          : 'Some permissions are still blocked. Open settings to allow them.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not request permission: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isRequestingPermission = false);
+    }
+  }
+
+  Future<void> _openAppPermissionSettings() async {
+    await openAppSettings();
+    await _refreshReminderPermissionStatus();
   }
 
   List<_DoseEntry> _buildTodayDoses(

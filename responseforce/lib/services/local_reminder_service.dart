@@ -4,6 +4,18 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
+class ReminderPermissionStatus {
+  const ReminderPermissionStatus({
+    required this.notificationsEnabled,
+    required this.exactAlarmsEnabled,
+  });
+
+  final bool notificationsEnabled;
+  final bool exactAlarmsEnabled;
+
+  bool get allGranted => notificationsEnabled && exactAlarmsEnabled;
+}
+
 class LocalReminderService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -45,6 +57,46 @@ class LocalReminderService {
     await iosImpl?.requestPermissions(alert: true, badge: true, sound: true);
 
     _isInitialized = true;
+  }
+
+  Future<ReminderPermissionStatus> getPermissionStatus() async {
+    final androidImpl = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+
+    if (androidImpl != null) {
+      final notificationsEnabled =
+          await androidImpl.areNotificationsEnabled() ?? false;
+      final exactAlarmsEnabled =
+          await androidImpl.canScheduleExactNotifications() ?? false;
+      return ReminderPermissionStatus(
+        notificationsEnabled: notificationsEnabled,
+        exactAlarmsEnabled: exactAlarmsEnabled,
+      );
+    }
+
+    return const ReminderPermissionStatus(
+      notificationsEnabled: true,
+      exactAlarmsEnabled: true,
+    );
+  }
+
+  Future<ReminderPermissionStatus> requestPermissions() async {
+    final androidImpl = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    await androidImpl?.requestNotificationsPermission();
+    await androidImpl?.requestExactAlarmsPermission();
+
+    final iosImpl = _plugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >();
+    await iosImpl?.requestPermissions(alert: true, badge: true, sound: true);
+
+    return getPermissionStatus();
   }
 
   Future<void> replaceRoutineReminders({

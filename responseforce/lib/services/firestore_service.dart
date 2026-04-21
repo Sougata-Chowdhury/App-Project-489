@@ -3,6 +3,46 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 enum CaseType { sos, assistance }
 
+class AdminRiskUserInsight {
+  const AdminRiskUserInsight({
+    required this.uid,
+    required this.elderName,
+    required this.totalSos,
+    required this.unresolvedSos,
+    required this.lastIncidentAt,
+    required this.riskScore,
+  });
+
+  final String uid;
+  final String elderName;
+  final int totalSos;
+  final int unresolvedSos;
+  final DateTime? lastIncidentAt;
+  final int riskScore;
+}
+
+class AdminSosAnalytics {
+  const AdminSosAnalytics({
+    required this.weekTotal,
+    required this.monthTotal,
+    required this.resolvedCount,
+    required this.pendingCount,
+    required this.inProgressCount,
+    required this.avgResponseMinutes,
+    required this.repeatEmergencyUsers,
+    required this.highRiskUsers,
+  });
+
+  final int weekTotal;
+  final int monthTotal;
+  final int resolvedCount;
+  final int pendingCount;
+  final int inProgressCount;
+  final double? avgResponseMinutes;
+  final int repeatEmergencyUsers;
+  final List<AdminRiskUserInsight> highRiskUsers;
+}
+
 class FirestoreService {
   FirestoreService({FirebaseFirestore? db, FirebaseAuth? auth})
     : _db = db ?? FirebaseFirestore.instance,
@@ -35,8 +75,6 @@ class FirestoreService {
 
     await _db.collection('elder_profiles').doc(uid).set({
       'uid': uid,
-
-      // camelCase (existing app)
       'fullName': fullName.trim(),
       'phoneNumber': phoneNumber.trim(),
       'age': parsedAge,
@@ -47,8 +85,6 @@ class FirestoreService {
       'emergencyContactNumber': emergencyContactNumber.trim().isEmpty
           ? null
           : emergencyContactNumber.trim(),
-
-      // snake_case (schema-aligned)
       'user_id': uid,
       'full_name': fullName.trim(),
       'age_int': parsedAge,
@@ -59,7 +95,6 @@ class FirestoreService {
       'emergency_contact_number': emergencyContactNumber.trim().isEmpty
           ? null
           : emergencyContactNumber.trim(),
-
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
@@ -88,8 +123,7 @@ class FirestoreService {
 
     final ref = await _db.collection('assistance_requests').add({
       'uid': uid,
-      // Schema-aligned field name; keep 'type' for backwards compatibility/UI.
-      'request_type': type, // MedicineHelp | GroceryHelp | GeneralAssistance
+      'request_type': type,
       'type': type,
       'summary': effectiveSummary,
       'urgency': normalizedUrgency,
@@ -101,7 +135,6 @@ class FirestoreService {
       'updatedAt': now,
       'handledBy': null,
       'notes': null,
-      // denormalized snapshot for admin list/detail
       'elderName': profile?['fullName'] ?? profile?['full_name'],
       'elderPhone': profile?['phoneNumber'],
       'elderBloodGroup': profile?['bloodGroup'] ?? profile?['blood_group'],
@@ -149,7 +182,6 @@ class FirestoreService {
     String? status,
   }) {
     var q = _db.collection('assistance_requests').where('uid', isEqualTo: uid);
-
     if (status != null) q = q.where('status', isEqualTo: status);
     return q.snapshots();
   }
@@ -195,7 +227,6 @@ class FirestoreService {
       });
     });
 
-    // Notification log as best-effort (non-transactional)
     final snap = await ref.get();
     final targetUid = (snap.data()?['uid'] ?? '').toString();
     final requestSummary = (snap.data()?['summary'] ?? '').toString().trim();
@@ -233,7 +264,6 @@ class FirestoreService {
       'updatedAt': now,
       'handledBy': null,
       'notes': null,
-      // denormalized snapshot for admin list/detail
       'elderName': profile?['fullName'] ?? profile?['full_name'],
       'elderPhone': profile?['phoneNumber'],
       'elderBloodGroup': profile?['bloodGroup'] ?? profile?['blood_group'],
@@ -273,7 +303,6 @@ class FirestoreService {
     String? status,
   }) {
     var q = _db.collection('sos_alerts').where('uid', isEqualTo: uid);
-
     if (status != null) q = q.where('status', isEqualTo: status);
     return q.snapshots();
   }
@@ -335,8 +364,171 @@ class FirestoreService {
   }
 
   // ----------------------------
-  // Status history & notifications
+  // Admin analytics
   // ----------------------------
+
+  Future<AdminSosAnalytics> getAdminSosAnalytics({DateTime? now}) async {
+    final anchor = now ?? DateTime.now();
+    final today = DateTime(anchor.year, anchor.month, anchor.day);
+    final startOfWeek = today.subtract(Duration(days: anchor.weekday - 1));
+    final startOfMonth = DateTime(anchor.year, anchor.month, 1);
+    final rolling30Start = today.subtract(const Duration(days: 29));
+
+    final monthSosSnap = await _db
+        .collection('sos_alerts')
+        .where(
+          'createdAt',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfMonth),
+        )
+        .get();
+    final rollingSosSnap = await _db
+        .collection('sos_alerts')
+        .where(
+          'createdAt',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(rolling30Start),
+        )
+        .get();
+
+    final monthDocs = monthSosSnap.docs;
+    final rollingDocs = rollingSosSnap.docs;
+
+    var weekTotal = 0;
+    var monthTotal = 0;
+    var resolvedCount = 0;
+    var pendingCount = 0;
+    var inProgressCount = 0;
+
+    final monthTargetIds = <String>{};
+    final createdByTargetId = <String, DateTime>{};
+
+    for (final doc in monthDocs) {
+      final data = doc.data();
+      final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+      if (createdAt == null) continue;
+
+      monthTotal += 1;
+      if (!createdAt.isBefore(startOfWeek)) weekTotal += 1;
+
+      final status = (data['status'] ?? 'pending').toString();
+      if (status == 'resolved') {
+        resolvedCount += 1;
+      } else if (status == 'in_progress') {
+        inProgressCount += 1;
+      } else {
+        pendingCount += 1;
+      }
+
+      monthTargetIds.add(doc.id);
+      createdByTargetId[doc.id] = createdAt;
+    }
+
+    final firstResponseByTargetId = <String, DateTime>{};
+    if (monthTargetIds.isNotEmpty) {
+      final historySnap = await _db
+          .collection('status_history')
+          .where('targetType', isEqualTo: 'SOS')
+          .get();
+
+      for (final doc in historySnap.docs) {
+        final data = doc.data();
+        final targetId = (data['targetId'] ?? '').toString();
+        if (!monthTargetIds.contains(targetId)) continue;
+
+        final newStatus = (data['newStatus'] ?? '').toString();
+        if (newStatus != 'in_progress' && newStatus != 'resolved') continue;
+
+        final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
+        if (updatedAt == null) continue;
+
+        final existing = firstResponseByTargetId[targetId];
+        if (existing == null || updatedAt.isBefore(existing)) {
+          firstResponseByTargetId[targetId] = updatedAt;
+        }
+      }
+    }
+
+    var totalResponseMinutes = 0.0;
+    var responseSamples = 0;
+    for (final entry in createdByTargetId.entries) {
+      final respondedAt = firstResponseByTargetId[entry.key];
+      if (respondedAt == null || respondedAt.isBefore(entry.value)) continue;
+      totalResponseMinutes +=
+          respondedAt.difference(entry.value).inSeconds / 60.0;
+      responseSamples += 1;
+    }
+    final avgResponseMinutes = responseSamples == 0
+        ? null
+        : totalResponseMinutes / responseSamples;
+
+    final byUser = <String, _RiskAggregate>{};
+    for (final doc in rollingDocs) {
+      final data = doc.data();
+      final uidValue = (data['uid'] ?? '').toString();
+      if (uidValue.isEmpty) continue;
+
+      final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+      final status = (data['status'] ?? 'pending').toString();
+      final elderName = (data['elderName'] ?? '').toString();
+
+      final aggregate = byUser.putIfAbsent(
+        uidValue,
+        () => _RiskAggregate(uid: uidValue, elderName: elderName),
+      );
+      aggregate.totalSos += 1;
+      if (status != 'resolved') aggregate.unresolvedSos += 1;
+      if (createdAt != null &&
+          (aggregate.lastIncidentAt == null ||
+              createdAt.isAfter(aggregate.lastIncidentAt!))) {
+        aggregate.lastIncidentAt = createdAt;
+      }
+      if (aggregate.elderName.trim().isEmpty && elderName.trim().isNotEmpty) {
+        aggregate.elderName = elderName;
+      }
+    }
+
+    final riskInsights =
+        byUser.values
+            .map((agg) {
+              var score = agg.totalSos * 2 + agg.unresolvedSos * 3;
+              if (agg.totalSos >= 4) score += 2;
+              return AdminRiskUserInsight(
+                uid: agg.uid,
+                elderName: agg.elderName.trim().isEmpty
+                    ? 'Unknown Elder'
+                    : agg.elderName.trim(),
+                totalSos: agg.totalSos,
+                unresolvedSos: agg.unresolvedSos,
+                lastIncidentAt: agg.lastIncidentAt,
+                riskScore: score,
+              );
+            })
+            .where(
+              (insight) => insight.totalSos >= 2 || insight.unresolvedSos > 0,
+            )
+            .toList()
+          ..sort((a, b) {
+            final byScore = b.riskScore.compareTo(a.riskScore);
+            if (byScore != 0) return byScore;
+            final byTotal = b.totalSos.compareTo(a.totalSos);
+            if (byTotal != 0) return byTotal;
+            return b.unresolvedSos.compareTo(a.unresolvedSos);
+          });
+
+    final repeatEmergencyUsers = byUser.values
+        .where((agg) => agg.totalSos >= 2)
+        .length;
+
+    return AdminSosAnalytics(
+      weekTotal: weekTotal,
+      monthTotal: monthTotal,
+      resolvedCount: resolvedCount,
+      pendingCount: pendingCount,
+      inProgressCount: inProgressCount,
+      avgResponseMinutes: avgResponseMinutes,
+      repeatEmergencyUsers: repeatEmergencyUsers,
+      highRiskUsers: riskInsights.take(8).toList(),
+    );
+  }
 
   // ----------------------------
   // Medication routines & logs
@@ -449,7 +641,7 @@ class FirestoreService {
   Future<void> setMedicationDoseStatus({
     required String routineId,
     required DateTime scheduledAt,
-    required String status, // taken | missed
+    required String status,
     String source = 'elder_manual',
   }) async {
     if (status != 'taken' && status != 'missed') {
@@ -537,7 +729,6 @@ class FirestoreService {
           hour,
           minute,
         );
-
         if (!scheduled.isBefore(cutoff)) continue;
 
         final logRef = _db
@@ -561,6 +752,10 @@ class FirestoreService {
       }
     }
   }
+
+  // ----------------------------
+  // Status history & notifications
+  // ----------------------------
 
   Stream<QuerySnapshot<Map<String, dynamic>>> statusHistoryStream({
     required CaseType type,
@@ -729,4 +924,14 @@ class FirestoreService {
   String _timeKey(DateTime dt) {
     return '${dt.hour.toString().padLeft(2, '0')}${dt.minute.toString().padLeft(2, '0')}';
   }
+}
+
+class _RiskAggregate {
+  _RiskAggregate({required this.uid, required this.elderName});
+
+  final String uid;
+  String elderName;
+  int totalSos = 0;
+  int unresolvedSos = 0;
+  DateTime? lastIncidentAt;
 }

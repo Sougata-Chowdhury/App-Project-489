@@ -42,9 +42,9 @@ class RoleSelectScreen extends StatelessWidget {
               Text(
                 'Please select your role to continue.',
                 textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.black54,
+                ),
               ),
               const Spacer(),
             ],

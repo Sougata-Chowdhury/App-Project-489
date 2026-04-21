@@ -60,7 +60,37 @@ class ElderHomeScreen extends StatelessWidget {
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: isTablet ? 700 : 520),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.primaryContainer,
+                                child: Icon(
+                                  Icons.health_and_safety_outlined,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimaryContainer,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Use SOS for emergencies. For daily needs, use assistance options below.',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
                       SizedBox(
                         height: math.min(maxH * 0.45, sosSize + 20),
                         child: Center(
@@ -103,6 +133,43 @@ class ElderHomeScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 10),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _QuickActionButton(
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const NearbyResourcesScreen(),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.near_me_outlined),
+                                  label: 'Find Nearby',
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _QuickActionButton(
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const MedicationReminderScreen(),
+                                    ),
+                                  ),
+                                  icon: const Icon(
+                                    Icons.medication_liquid_outlined,
+                                  ),
+                                  label: 'Medication',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
@@ -117,35 +184,42 @@ class ElderHomeScreen extends StatelessWidget {
                           padding: const EdgeInsets.all(12),
                           child: Column(
                             children: [
-                              _AssistanceActionTile(
-                                title: 'Medicine Help',
-                                subtitle:
-                                    'Request medicine pickup or pharmacy support.',
-                                icon: Icons.medication_outlined,
-                                onTap: () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const MedicineHelpScreen(),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _AssistanceButton(
+                                      label: 'Medicine Help',
+                                      icon: Icons.medication_outlined,
+                                      onPressed: () =>
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const MedicineHelpScreen(),
+                                            ),
+                                          ),
+                                    ),
                                   ),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              _AssistanceActionTile(
-                                title: 'Grocery Help',
-                                subtitle:
-                                    'Send grocery list and delivery instructions.',
-                                icon: Icons.local_grocery_store_outlined,
-                                onTap: () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const GroceryHelpScreen(),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _AssistanceButton(
+                                      label: 'Grocery Help',
+                                      icon: Icons.local_grocery_store_outlined,
+                                      onPressed: () =>
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const GroceryHelpScreen(),
+                                            ),
+                                          ),
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
-                              const SizedBox(height: 10),
-                              _AssistanceActionTile(
-                                title: 'General Assistance',
-                                subtitle: 'Describe any other help you need.',
+                              const SizedBox(height: 12),
+                              _AssistanceButton(
+                                label: 'General Assistance',
                                 icon: Icons.support_agent_outlined,
-                                onTap: () => Navigator.of(context).push(
+                                onPressed: () => Navigator.of(context).push(
                                   MaterialPageRoute(
                                     builder: (_) =>
                                         const GeneralAssistanceScreen(),
@@ -153,41 +227,6 @@ class ElderHomeScreen extends StatelessWidget {
                                 ),
                               ),
                             ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: _AssistanceActionTile(
-                            title: 'Medication & Reminders',
-                            subtitle:
-                                'Set routine reminders and log taken/missed doses.',
-                            icon: Icons.alarm,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    const MedicationReminderScreen(),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: _AssistanceActionTile(
-                            title: 'Find Nearby',
-                            subtitle:
-                                'Hospitals, pharmacies and police near your location.',
-                            icon: Icons.place_outlined,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const NearbyResourcesScreen(),
-                              ),
-                            ),
                           ),
                         ),
                       ),
@@ -203,59 +242,55 @@ class ElderHomeScreen extends StatelessWidget {
   }
 }
 
-class _AssistanceActionTile extends StatelessWidget {
-  const _AssistanceActionTile({
-    required this.title,
-    required this.subtitle,
+class _QuickActionButton extends StatelessWidget {
+  const _QuickActionButton({
+    required this.onPressed,
     required this.icon,
-    required this.onTap,
+    required this.label,
   });
 
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback onPressed;
+  final Icon icon;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Ink(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outlineVariant,
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: icon,
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+}
+
+class _AssistanceButton extends StatelessWidget {
+  const _AssistanceButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size.fromHeight(50),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: Theme.of(
-                context,
-              ).colorScheme.primaryContainer.withValues(alpha: 0.7),
-              child: Icon(icon),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(subtitle),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right),
-          ],
         ),
       ),
     );

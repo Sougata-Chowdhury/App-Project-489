@@ -40,10 +40,6 @@ class RequestStatusScreen extends StatelessWidget {
                   final status = data?['status']?.toString() ?? 'pending';
                   final notes = data?['notes']?.toString();
                   final handledBy = data?['handledBy']?.toString();
-                  final summary = data?['summary']?.toString();
-                  final urgency = data?['urgency']?.toString();
-                  final preferredTime = (data?['preferredTime'] as Timestamp?)
-                      ?.toDate();
 
                   final createdAt = (data?['createdAt'] as Timestamp?)
                       ?.toDate();
@@ -93,14 +89,6 @@ class RequestStatusScreen extends StatelessWidget {
                           const SizedBox(height: 8),
                           if (caseTypeLabel != null)
                             Text('Case: $caseTypeLabel'),
-                          if (summary != null && summary.trim().isNotEmpty)
-                            Text('Request: ${summary.trim()}'),
-                          if (urgency != null && urgency.trim().isNotEmpty)
-                            Text('Urgency: ${_urgencyLabel(urgency)}'),
-                          if (preferredTime != null)
-                            Text(
-                              'Preferred time: ${DateFormat.yMMMd().add_jm().format(preferredTime)}',
-                            ),
                           if (createdAt != null)
                             Text(
                               'Created: ${DateFormat.yMMMd().add_jm().format(createdAt)}',
@@ -142,13 +130,4 @@ class RequestStatusScreen extends StatelessWidget {
       ),
     );
   }
-}
-
-String _urgencyLabel(String status) {
-  return switch (status) {
-    'low' => 'Low',
-    'high' => 'High',
-    'urgent' => 'Urgent',
-    _ => 'Medium',
-  };
 }

@@ -68,6 +68,20 @@ class AdminCaseDetailScreen extends StatelessWidget {
                       children: [
                         Row(
                           children: [
+                            CircleAvatar(
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.primaryContainer,
+                              child: Icon(
+                                type == CaseType.sos
+                                    ? Icons.sos_outlined
+                                    : Icons.volunteer_activism_outlined,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
                             Expanded(
                               child: Text(
                                 type == CaseType.sos
@@ -83,6 +97,7 @@ class AdminCaseDetailScreen extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 6),
+                        _kv('Case ID', docRef.id),
                         Text(
                           'Created: ${createdAt != null ? DateFormat.yMMMd().add_jm().format(createdAt) : '—'}',
                         ),
@@ -192,9 +207,9 @@ class AdminCaseDetailScreen extends StatelessWidget {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _statusBtn(context, service, 'pending'),
-                    _statusBtn(context, service, 'in_progress'),
-                    _statusBtn(context, service, 'resolved'),
+                    _statusBtn(context, service, 'pending', status),
+                    _statusBtn(context, service, 'in_progress', status),
+                    _statusBtn(context, service, 'resolved', status),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -254,8 +269,17 @@ class AdminCaseDetailScreen extends StatelessWidget {
     BuildContext context,
     FirestoreService service,
     String status,
+    String currentStatus,
   ) {
-    return FilledButton(
+    final isCurrent = status == currentStatus;
+    if (isCurrent) {
+      return FilledButton.tonalIcon(
+        onPressed: null,
+        icon: const Icon(Icons.check_circle_outline),
+        label: Text(_statusLabel(status)),
+      );
+    }
+    return OutlinedButton(
       onPressed: () => _updateStatus(context, service, status),
       child: Text(_statusLabel(status)),
     );
