@@ -396,19 +396,14 @@ At the time of review, the test suite is minimal and primarily covers a basic ro
 
 ## Known Gaps and Implementation Notes
 
-### 1. Web support is incomplete
-The web build currently shows a dedicated Firebase notice screen rather than the full app flow.
 
-### 2. Existing README is still boilerplate
-The current `responseforce/README.md` in the repository is the default Flutter starter README and should be replaced with project-specific documentation.
-
-### 3. Test coverage is limited
+### 1. Test coverage is limited
 Only a small widget smoke test is present.
 
-### 4. Large UI files would benefit from modularization
+### 2. Large UI files would benefit from modularization
 Some screens, especially the medication reminder flow, are large and combine UI and workflow logic in a single file. Splitting screens into smaller widgets and controllers/services would improve maintainability.
 
-### 5. Remote reminder delivery path may need backend completion
+### 3. Remote reminder delivery path may need backend completion
 The app stores remote reminder metadata and device tokens, but production-grade delivery usually also requires a backend scheduler or Cloud Function to dispatch FCM messages at the right time.
 
 ---
@@ -423,16 +418,6 @@ The app stores remote reminder metadata and device tokens, but production-grade 
 6. Add CI for formatting, analysis, and tests.
 7. Complete web Firebase support or explicitly scope the app to mobile only.
 8. Add screenshots or GIFs for the elder and admin flows.
-
----
-
-## Recommended README Placement
-
-For this repository, the most useful location for this documentation is:
-
-- `responseforce/README.md`
-
-That is the actual Flutter app root and the place where developers will look first when setting up or modifying the application.
 
 ---
 
