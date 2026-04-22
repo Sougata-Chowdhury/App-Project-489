@@ -14,6 +14,7 @@ class ReminderPermissionStatus {
   final bool exactAlarmsEnabled;
 
   bool get allGranted => notificationsEnabled && exactAlarmsEnabled;
+  bool get canScheduleReminders => notificationsEnabled;
 }
 
 class LocalReminderService {
@@ -99,6 +100,16 @@ class LocalReminderService {
     return getPermissionStatus();
   }
 
+  Future<ReminderPermissionStatus> ensureSchedulingPermissions() async {
+    final current = await getPermissionStatus();
+    if (current.canScheduleReminders) return current;
+
+    final requested = await requestPermissions();
+    if (requested.canScheduleReminders) return requested;
+
+    throw StateError('Enable Notifications permission to schedule reminders.');
+  }
+
   Future<void> replaceRoutineReminders({
     required String routineId,
     required String medicineName,
@@ -117,6 +128,10 @@ class LocalReminderService {
     }
 
     if (!isActive) return;
+    final permissionStatus = await ensureSchedulingPermissions();
+    final scheduleMode = permissionStatus.exactAlarmsEnabled
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
 
     for (final time in reminderTimes) {
       final parsed = _parseTime(time);
@@ -145,7 +160,7 @@ class LocalReminderService {
             presentSound: true,
           ),
         ),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        androidScheduleMode: scheduleMode,
         matchDateTimeComponents: DateTimeComponents.time,
         payload: 'medication|$routineId|$time',
       );
@@ -161,6 +176,36 @@ class LocalReminderService {
     }
   }
 
+  Future<void> showInstantNotification({
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    await _plugin.show(
+      _stableHash(
+        'instant|${DateTime.now().millisecondsSinceEpoch}|$title|$body',
+      ),
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'medication_reminders',
+          'Medication Reminders',
+          channelDescription: 'Daily medicine reminders for elders',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      payload: payload,
+    );
+  }
+
   tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
     final now = tz.TZDateTime.now(tz.local);
     var scheduled = tz.TZDateTime(
@@ -172,6 +217,10 @@ class LocalReminderService {
       minute,
     );
     if (scheduled.isBefore(now)) {
+      // If user selects the current minute, trigger shortly instead of waiting a full day.
+      if (now.hour == hour && now.minute == minute) {
+        return now.add(const Duration(seconds: 10));
+      }
       scheduled = scheduled.add(const Duration(days: 1));
     }
     return scheduled;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -6,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../services/firestore_service.dart';
 import '../services/local_reminder_service.dart';
+import '../services/remote_reminder_service.dart';
 import '../widgets/primary_button.dart';
 
 class MedicationReminderScreen extends StatefulWidget {
@@ -29,6 +32,9 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
   bool _isPermissionLoading = false;
   bool _isRequestingPermission = false;
   ReminderPermissionStatus? _permissionStatus;
+  final Map<String, String> _doseStatusOverrides = {};
+  Timer? _uiTicker;
+  String? _lastDueSnackMinuteKey;
 
   String? _editingRoutineId;
   List<String> _previousReminderTimes = const [];
@@ -40,10 +46,15 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
       _syncOverdueMissed();
       _refreshReminderPermissionStatus();
     });
+    _uiTicker = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (!mounted) return;
+      setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _uiTicker?.cancel();
     _medicineCtrl.dispose();
     _dosageCtrl.dispose();
     _instructionsCtrl.dispose();
@@ -248,15 +259,21 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
 
   Widget _buildPermissionCard(LocalReminderService reminderService) {
     final status = _permissionStatus;
-    final hasIssue = status != null && !status.allGranted;
+    final notificationMissing = status != null && !status.notificationsEnabled;
+    final exactAlarmMissing =
+        status != null &&
+        status.notificationsEnabled &&
+        !status.exactAlarmsEnabled;
 
-    if (!hasIssue && !_isPermissionLoading) {
+    if (!notificationMissing && !exactAlarmMissing && !_isPermissionLoading) {
       return const SizedBox.shrink();
     }
 
     final theme = Theme.of(context);
     return Card(
-      color: theme.colorScheme.errorContainer.withValues(alpha: 0.42),
+      color: notificationMissing
+          ? theme.colorScheme.errorContainer.withValues(alpha: 0.42)
+          : theme.colorScheme.secondaryContainer.withValues(alpha: 0.42),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -273,7 +290,9 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
               const LinearProgressIndicator(minHeight: 3)
             else
               Text(
-                'Reminders need Notification and Alarm permission. Use Enable permissions first, then open app settings if Android still blocks it.',
+                notificationMissing
+                    ? 'Reminders require Notification permission. Enable it to show reminders in notification bar.'
+                    : 'Exact Alarm is off. Reminders still work but may be slightly delayed on some devices.',
                 style: theme.textTheme.bodyMedium,
               ),
             const SizedBox(height: 10),
@@ -437,6 +456,10 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
                 const <QueryDocumentSnapshot<Map<String, dynamic>>>[];
             final now = DateTime.now();
             final doses = _buildTodayDoses(routines, logs, now);
+            final dueNow = doses
+                .where((dose) => _isDoseDueNow(dose, now))
+                .toList();
+            _emitDueNowSnackIfNeeded(dueNow, now);
 
             return RefreshIndicator(
               onRefresh: _syncOverdueMissed,
@@ -473,6 +496,33 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
+                  if (dueNow.isNotEmpty) ...[
+                    Card(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.errorContainer.withValues(alpha: 0.45),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.alarm_on_outlined),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                dueNow.length == 1
+                                    ? '${dueNow.first.medicineName} is due now. Mark it as Taken or Missed.'
+                                    : '${dueNow.length} medicines are due now. Mark them as Taken or Missed.',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   if (doses.isEmpty)
                     const Card(
                       child: Padding(
@@ -491,6 +541,8 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
   }
 
   Widget _doseCard(FirestoreService service, _DoseEntry dose) {
+    final now = DateTime.now();
+    final isDueNow = _isDoseDueNow(dose, now);
     final statusColor = switch (dose.status) {
       'taken' => Colors.green.shade700,
       'missed' => Colors.red.shade700,
@@ -501,10 +553,17 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
       'missed' => 'Missed',
       _ => 'Pending',
     };
-    final canMark = dose.status == null;
+    final canMarkTaken = dose.status != 'taken';
+    final canMarkMissed = dose.status != 'missed';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: isDueNow
+            ? BorderSide(color: Colors.red.shade400, width: 1.4)
+            : BorderSide.none,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -530,6 +589,18 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                if (isDueNow) ...[
+                  const SizedBox(width: 6),
+                  Chip(
+                    label: const Text('Due now'),
+                    backgroundColor: Colors.red.shade50,
+                    side: BorderSide(color: Colors.red.shade200),
+                    labelStyle: TextStyle(
+                      color: Colors.red.shade700,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ],
             ),
             if (dose.dosage.isNotEmpty) Text('Dosage: ${dose.dosage}'),
@@ -540,7 +611,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
               children: [
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: canMark
+                    onPressed: canMarkTaken
                         ? () => _markDose(service, dose, 'taken')
                         : null,
                     icon: const Icon(Icons.check_circle_outline),
@@ -550,7 +621,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: canMark
+                    onPressed: canMarkMissed
                         ? () => _markDose(service, dose, 'missed')
                         : null,
                     icon: const Icon(Icons.cancel_outlined),
@@ -566,6 +637,24 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
   }
 
   Future<void> _pickTime() async {
+    final localReminderService = context.read<LocalReminderService>();
+    final remoteReminderService = context.read<RemoteReminderService>();
+    try {
+      await _ensureReminderPermissionsBeforeScheduling(
+        localReminderService: localReminderService,
+        remoteReminderService: remoteReminderService,
+        requireRemotePush: true,
+        requireLocalSchedule: _isActive,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Permission required: $e')));
+      return;
+    }
+    if (!mounted) return;
+
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
@@ -587,6 +676,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
     }
 
     final reminderService = context.read<LocalReminderService>();
+    final remoteReminderService = context.read<RemoteReminderService>();
     final reminderTimes = _sortedTimes().map(_toTimeKey).toList();
     final medicineName = _medicineCtrl.text.trim();
     final dosage = _dosageCtrl.text.trim();
@@ -594,6 +684,13 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
 
     setState(() => _isSaving = true);
     try {
+      await _ensureReminderPermissionsBeforeScheduling(
+        localReminderService: reminderService,
+        remoteReminderService: remoteReminderService,
+        requireRemotePush: _isActive,
+        requireLocalSchedule: _isActive,
+      );
+      String routineId;
       if (_editingRoutineId == null) {
         final ref = await service.createMedicationRoutine(
           medicineName: medicineName,
@@ -602,16 +699,18 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
           reminderTimes: reminderTimes,
           isActive: _isActive,
         );
+        routineId = ref.id;
         await reminderService.replaceRoutineReminders(
-          routineId: ref.id,
+          routineId: routineId,
           medicineName: medicineName,
           dosage: dosage,
           reminderTimes: reminderTimes,
           isActive: _isActive,
         );
       } else {
+        routineId = _editingRoutineId!;
         await service.updateMedicationRoutine(
-          routineId: _editingRoutineId!,
+          routineId: routineId,
           medicineName: medicineName,
           dosage: dosage.isEmpty ? null : dosage,
           instructions: instructions.isEmpty ? null : instructions,
@@ -619,7 +718,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
           isActive: _isActive,
         );
         await reminderService.replaceRoutineReminders(
-          routineId: _editingRoutineId!,
+          routineId: routineId,
           medicineName: medicineName,
           dosage: dosage,
           reminderTimes: reminderTimes,
@@ -627,6 +726,21 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
           isActive: _isActive,
         );
       }
+
+      String? remoteWarning;
+      try {
+        await remoteReminderService.syncMedicationRoutineSchedule(
+          routineId: routineId,
+          medicineName: medicineName,
+          dosage: dosage,
+          reminderTimes: reminderTimes,
+          isActive: _isActive,
+        );
+      } catch (_) {
+        remoteWarning =
+            'Cloud push not available right now. Local reminders are still scheduled.';
+      }
+      await _refreshReminderPermissionStatus();
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -636,6 +750,11 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
           ),
         ),
       );
+      if (remoteWarning != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(remoteWarning)));
+      }
       _resetForm();
     } catch (e) {
       if (!mounted) return;
@@ -680,6 +799,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
     bool isActive,
   ) async {
     final reminderService = context.read<LocalReminderService>();
+    final remoteReminderService = context.read<RemoteReminderService>();
     final medicineName = (data['medicineName'] ?? '').toString();
     final dosage = (data['dosage'] ?? '').toString();
     final times = ((data['reminderTimes'] as List?) ?? const [])
@@ -687,6 +807,12 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
         .toList();
 
     try {
+      await _ensureReminderPermissionsBeforeScheduling(
+        localReminderService: reminderService,
+        remoteReminderService: remoteReminderService,
+        requireRemotePush: isActive,
+        requireLocalSchedule: isActive,
+      );
       await service.updateMedicationRoutine(
         routineId: routineId,
         medicineName: medicineName,
@@ -703,12 +829,31 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
         oldReminderTimes: times,
         isActive: isActive,
       );
+      String? remoteWarning;
+      try {
+        await remoteReminderService.syncMedicationRoutineSchedule(
+          routineId: routineId,
+          medicineName: medicineName,
+          dosage: dosage,
+          reminderTimes: times,
+          isActive: isActive,
+        );
+      } catch (_) {
+        remoteWarning =
+            'Cloud push not available right now. Local reminders are still active.';
+      }
+      await _refreshReminderPermissionStatus();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(isActive ? 'Routine activated.' : 'Routine paused.'),
         ),
       );
+      if (remoteWarning != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(remoteWarning)));
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -723,6 +868,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
     List<String> reminderTimes,
   ) async {
     final reminderService = context.read<LocalReminderService>();
+    final remoteReminderService = context.read<RemoteReminderService>();
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -750,6 +896,9 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
         routineId: routineId,
         reminderTimes: reminderTimes,
       );
+      try {
+        await remoteReminderService.removeMedicationRoutineSchedule(routineId);
+      } catch (_) {}
       await service.deleteMedicationRoutine(routineId);
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -766,11 +915,29 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
     }
   }
 
+  Future<void> _ensureReminderPermissionsBeforeScheduling({
+    required LocalReminderService localReminderService,
+    required RemoteReminderService remoteReminderService,
+    required bool requireRemotePush,
+    required bool requireLocalSchedule,
+  }) async {
+    await _refreshReminderPermissionStatus();
+    if (requireRemotePush) {
+      await remoteReminderService.ensureNotificationPermission();
+    }
+    if (requireLocalSchedule) {
+      await localReminderService.ensureSchedulingPermissions();
+    }
+  }
+
   Future<void> _markDose(
     FirestoreService service,
     _DoseEntry dose,
     String status,
   ) async {
+    final key = _doseKey(dose.routineId, dose.scheduledAt);
+    final previousStatus = _doseStatusOverrides[key] ?? dose.status;
+    setState(() => _doseStatusOverrides[key] = status);
     try {
       await service.setMedicationDoseStatus(
         routineId: dose.routineId,
@@ -786,6 +953,15 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
         ),
       );
     } catch (e) {
+      if (mounted) {
+        setState(() {
+          if (previousStatus == null || previousStatus.isEmpty) {
+            _doseStatusOverrides.remove(key);
+          } else {
+            _doseStatusOverrides[key] = previousStatus;
+          }
+        });
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -833,7 +1009,7 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
       final status = await reminderService.requestPermissions();
       if (!mounted) return;
       setState(() => _permissionStatus = status);
-      final message = status.allGranted
+      final message = status.canScheduleReminders
           ? 'Reminder permissions enabled.'
           : 'Some permissions are still blocked. Open settings to allow them.';
       ScaffoldMessenger.of(
@@ -864,9 +1040,13 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
       final data = log.data();
       final routineId = (data['routineId'] ?? '').toString();
       final ts = (data['scheduledAt'] as Timestamp?)?.toDate();
+      final storedTimeLabel = (data['scheduledTimeLabel'] ?? '').toString();
       final status = (data['status'] ?? '').toString();
       if (routineId.isEmpty || ts == null || status.isEmpty) continue;
-      logMap['$routineId|${_timeKey(ts)}'] = status;
+      final timeLabel = storedTimeLabel.isNotEmpty
+          ? storedTimeLabel
+          : _timeKey(ts);
+      logMap[_doseKeyByTimeLabel(routineId, timeLabel)] = status;
     }
 
     final today = DateTime(now.year, now.month, now.day);
@@ -898,7 +1078,9 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
             medicineName: medicineName,
             dosage: dosage,
             scheduledAt: scheduled,
-            status: logMap['${routine.id}|${_timeKey(scheduled)}'],
+            status:
+                _doseStatusOverrides[_doseKey(routine.id, scheduled)] ??
+                logMap[_doseKey(routine.id, scheduled)],
           ),
         );
       }
@@ -906,6 +1088,42 @@ class _MedicationReminderScreenState extends State<MedicationReminderScreen> {
 
     doses.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
     return doses;
+  }
+
+  bool _isDoseDueNow(_DoseEntry dose, DateTime now) {
+    final pending = dose.status == null || dose.status == 'pending';
+    return pending &&
+        dose.scheduledAt.year == now.year &&
+        dose.scheduledAt.month == now.month &&
+        dose.scheduledAt.day == now.day &&
+        dose.scheduledAt.hour == now.hour &&
+        dose.scheduledAt.minute == now.minute;
+  }
+
+  void _emitDueNowSnackIfNeeded(List<_DoseEntry> dueNow, DateTime now) {
+    if (dueNow.isEmpty || !mounted) return;
+    final minuteKey =
+        '${now.year}-${now.month}-${now.day} ${now.hour}:${now.minute}';
+    if (_lastDueSnackMinuteKey == minuteKey) return;
+    _lastDueSnackMinuteKey = minuteKey;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final message = dueNow.length == 1
+          ? 'Reminder: ${dueNow.first.medicineName} is due now.'
+          : 'Reminder: ${dueNow.length} medicines are due now.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), duration: const Duration(seconds: 5)),
+      );
+    });
+  }
+
+  String _doseKey(String routineId, DateTime scheduledAt) {
+    return _doseKeyByTimeLabel(routineId, _timeKey(scheduledAt));
+  }
+
+  String _doseKeyByTimeLabel(String routineId, String timeLabel) {
+    return '$routineId|$timeLabel';
   }
 
   List<TimeOfDay> _sortedTimes() {

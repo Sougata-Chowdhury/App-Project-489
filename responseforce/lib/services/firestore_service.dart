@@ -9,16 +9,16 @@ class AdminRiskUserInsight {
     required this.elderName,
     required this.totalSos,
     required this.unresolvedSos,
-    required this.lastIncidentAt,
     required this.riskScore,
+    required this.lastIncidentAt,
   });
 
   final String uid;
   final String elderName;
   final int totalSos;
   final int unresolvedSos;
-  final DateTime? lastIncidentAt;
   final int riskScore;
+  final DateTime? lastIncidentAt;
 }
 
 class AdminSosAnalytics {
@@ -75,6 +75,8 @@ class FirestoreService {
 
     await _db.collection('elder_profiles').doc(uid).set({
       'uid': uid,
+
+      // camelCase (existing app)
       'fullName': fullName.trim(),
       'phoneNumber': phoneNumber.trim(),
       'age': parsedAge,
@@ -85,6 +87,8 @@ class FirestoreService {
       'emergencyContactNumber': emergencyContactNumber.trim().isEmpty
           ? null
           : emergencyContactNumber.trim(),
+
+      // snake_case (schema-aligned)
       'user_id': uid,
       'full_name': fullName.trim(),
       'age_int': parsedAge,
@@ -95,6 +99,7 @@ class FirestoreService {
       'emergency_contact_number': emergencyContactNumber.trim().isEmpty
           ? null
           : emergencyContactNumber.trim(),
+
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
@@ -112,29 +117,32 @@ class FirestoreService {
     String type, {
     String? summary,
     String urgency = 'medium',
-    Map<String, dynamic>? details,
+    Map<String, dynamic> details = const {},
     DateTime? preferredTime,
   }) async {
     final now = FieldValue.serverTimestamp();
     final profile = await getElderProfileSnapshot(uid);
     final normalizedUrgency = _normalizeUrgency(urgency);
-    final cleanDetails = _cleanDetailsMap(details ?? const {});
-    final effectiveSummary = _effectiveSummary(type, summary, cleanDetails);
+    final cleanedDetails = _cleanDetailsMap(details);
+    final effectiveSummary = _effectiveSummary(type, summary, cleanedDetails);
 
     final ref = await _db.collection('assistance_requests').add({
       'uid': uid,
-      'request_type': type,
+      // Schema-aligned field name; keep 'type' for backwards compatibility/UI.
+      'request_type': type, // MedicineHelp | GroceryHelp | GeneralAssistance
       'type': type,
+      'status': 'pending',
       'summary': effectiveSummary,
       'urgency': normalizedUrgency,
-      if (cleanDetails.isNotEmpty) 'details': cleanDetails,
-      if (preferredTime != null)
-        'preferredTime': Timestamp.fromDate(preferredTime),
-      'status': 'pending',
+      'details': cleanedDetails,
+      'preferredTime': preferredTime == null
+          ? null
+          : Timestamp.fromDate(preferredTime),
       'createdAt': now,
       'updatedAt': now,
       'handledBy': null,
       'notes': null,
+      // denormalized snapshot for admin list/detail
       'elderName': profile?['fullName'] ?? profile?['full_name'],
       'elderPhone': profile?['phoneNumber'],
       'elderBloodGroup': profile?['bloodGroup'] ?? profile?['blood_group'],
@@ -182,6 +190,7 @@ class FirestoreService {
     String? status,
   }) {
     var q = _db.collection('assistance_requests').where('uid', isEqualTo: uid);
+
     if (status != null) q = q.where('status', isEqualTo: status);
     return q.snapshots();
   }
@@ -227,9 +236,9 @@ class FirestoreService {
       });
     });
 
+    // Notification log as best-effort (non-transactional)
     final snap = await ref.get();
     final targetUid = (snap.data()?['uid'] ?? '').toString();
-    final requestSummary = (snap.data()?['summary'] ?? '').toString().trim();
     if (targetUid.isNotEmpty) {
       await _createNotificationLog(
         recipientUid: targetUid,
@@ -238,7 +247,6 @@ class FirestoreService {
         title: 'Assistance request updated',
         body:
             'New status: ${_statusLabel(newStatus)}'
-            '${requestSummary.isNotEmpty ? '\nRequest: $requestSummary' : ''}'
             '${comment != null && comment.trim().isNotEmpty ? '\nNote: ${comment.trim()}' : ''}',
       );
     }
@@ -264,6 +272,7 @@ class FirestoreService {
       'updatedAt': now,
       'handledBy': null,
       'notes': null,
+      // denormalized snapshot for admin list/detail
       'elderName': profile?['fullName'] ?? profile?['full_name'],
       'elderPhone': profile?['phoneNumber'],
       'elderBloodGroup': profile?['bloodGroup'] ?? profile?['blood_group'],
@@ -303,6 +312,7 @@ class FirestoreService {
     String? status,
   }) {
     var q = _db.collection('sos_alerts').where('uid', isEqualTo: uid);
+
     if (status != null) q = q.where('status', isEqualTo: status);
     return q.snapshots();
   }
@@ -367,166 +377,143 @@ class FirestoreService {
   // Admin analytics
   // ----------------------------
 
-  Future<AdminSosAnalytics> getAdminSosAnalytics({DateTime? now}) async {
-    final anchor = now ?? DateTime.now();
-    final today = DateTime(anchor.year, anchor.month, anchor.day);
-    final startOfWeek = today.subtract(Duration(days: anchor.weekday - 1));
-    final startOfMonth = DateTime(anchor.year, anchor.month, 1);
-    final rolling30Start = today.subtract(const Duration(days: 29));
+  Future<AdminSosAnalytics> getAdminSosAnalytics() async {
+    final now = DateTime.now();
+    final startOfWeek = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
+    final startOfMonth = DateTime(now.year, now.month, 1);
+    final last30Days = now.subtract(const Duration(days: 30));
 
-    final monthSosSnap = await _db
-        .collection('sos_alerts')
-        .where(
-          'createdAt',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfMonth),
-        )
-        .get();
-    final rollingSosSnap = await _db
-        .collection('sos_alerts')
-        .where(
-          'createdAt',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(rolling30Start),
-        )
-        .get();
+    final sosSnap = await _db.collection('sos_alerts').get();
+    final statusHistorySnap = await _db.collection('status_history').get();
 
-    final monthDocs = monthSosSnap.docs;
-    final rollingDocs = rollingSosSnap.docs;
+    final sosDocs = sosSnap.docs;
+    final monthSos = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+    final weekSos = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+    final rolling30 = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
 
-    var weekTotal = 0;
-    var monthTotal = 0;
+    for (final d in sosDocs) {
+      final createdAt = (d.data()['createdAt'] as Timestamp?)?.toDate();
+      if (createdAt == null) continue;
+      if (!createdAt.isBefore(startOfWeek)) weekSos.add(d);
+      if (!createdAt.isBefore(startOfMonth)) monthSos.add(d);
+      if (!createdAt.isBefore(last30Days)) rolling30.add(d);
+    }
+
     var resolvedCount = 0;
     var pendingCount = 0;
     var inProgressCount = 0;
-
-    final monthTargetIds = <String>{};
-    final createdByTargetId = <String, DateTime>{};
-
-    for (final doc in monthDocs) {
-      final data = doc.data();
-      final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-      if (createdAt == null) continue;
-
-      monthTotal += 1;
-      if (!createdAt.isBefore(startOfWeek)) weekTotal += 1;
-
-      final status = (data['status'] ?? 'pending').toString();
+    for (final d in monthSos) {
+      final status = (d.data()['status'] ?? 'pending').toString();
       if (status == 'resolved') {
-        resolvedCount += 1;
+        resolvedCount++;
       } else if (status == 'in_progress') {
-        inProgressCount += 1;
+        inProgressCount++;
       } else {
-        pendingCount += 1;
+        pendingCount++;
       }
-
-      monthTargetIds.add(doc.id);
-      createdByTargetId[doc.id] = createdAt;
     }
 
-    final firstResponseByTargetId = <String, DateTime>{};
-    if (monthTargetIds.isNotEmpty) {
-      final historySnap = await _db
-          .collection('status_history')
-          .where('targetType', isEqualTo: 'SOS')
-          .get();
+    final responseTimes = <Duration>[];
+    final histByTarget =
+        <String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>{};
+    for (final h in statusHistorySnap.docs) {
+      final data = h.data();
+      if ((data['targetType'] ?? '').toString() != 'SOS') continue;
+      final targetId = (data['targetId'] ?? '').toString();
+      if (targetId.isEmpty) continue;
+      histByTarget.putIfAbsent(targetId, () => []).add(h);
+    }
 
-      for (final doc in historySnap.docs) {
-        final data = doc.data();
-        final targetId = (data['targetId'] ?? '').toString();
-        if (!monthTargetIds.contains(targetId)) continue;
-
+    for (final d in monthSos) {
+      final createdAt = (d.data()['createdAt'] as Timestamp?)?.toDate();
+      if (createdAt == null) continue;
+      final history = histByTarget[d.id] ?? const [];
+      DateTime? firstResponseAt;
+      for (final h in history) {
+        final data = h.data();
         final newStatus = (data['newStatus'] ?? '').toString();
         if (newStatus != 'in_progress' && newStatus != 'resolved') continue;
-
         final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
         if (updatedAt == null) continue;
-
-        final existing = firstResponseByTargetId[targetId];
-        if (existing == null || updatedAt.isBefore(existing)) {
-          firstResponseByTargetId[targetId] = updatedAt;
+        if (firstResponseAt == null || updatedAt.isBefore(firstResponseAt)) {
+          firstResponseAt = updatedAt;
         }
       }
-    }
-
-    var totalResponseMinutes = 0.0;
-    var responseSamples = 0;
-    for (final entry in createdByTargetId.entries) {
-      final respondedAt = firstResponseByTargetId[entry.key];
-      if (respondedAt == null || respondedAt.isBefore(entry.value)) continue;
-      totalResponseMinutes +=
-          respondedAt.difference(entry.value).inSeconds / 60.0;
-      responseSamples += 1;
-    }
-    final avgResponseMinutes = responseSamples == 0
-        ? null
-        : totalResponseMinutes / responseSamples;
-
-    final byUser = <String, _RiskAggregate>{};
-    for (final doc in rollingDocs) {
-      final data = doc.data();
-      final uidValue = (data['uid'] ?? '').toString();
-      if (uidValue.isEmpty) continue;
-
-      final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-      final status = (data['status'] ?? 'pending').toString();
-      final elderName = (data['elderName'] ?? '').toString();
-
-      final aggregate = byUser.putIfAbsent(
-        uidValue,
-        () => _RiskAggregate(uid: uidValue, elderName: elderName),
-      );
-      aggregate.totalSos += 1;
-      if (status != 'resolved') aggregate.unresolvedSos += 1;
-      if (createdAt != null &&
-          (aggregate.lastIncidentAt == null ||
-              createdAt.isAfter(aggregate.lastIncidentAt!))) {
-        aggregate.lastIncidentAt = createdAt;
-      }
-      if (aggregate.elderName.trim().isEmpty && elderName.trim().isNotEmpty) {
-        aggregate.elderName = elderName;
+      if (firstResponseAt != null && !firstResponseAt.isBefore(createdAt)) {
+        responseTimes.add(firstResponseAt.difference(createdAt));
       }
     }
 
-    final riskInsights =
-        byUser.values
-            .map((agg) {
-              var score = agg.totalSos * 2 + agg.unresolvedSos * 3;
-              if (agg.totalSos >= 4) score += 2;
-              return AdminRiskUserInsight(
-                uid: agg.uid,
-                elderName: agg.elderName.trim().isEmpty
-                    ? 'Unknown Elder'
-                    : agg.elderName.trim(),
-                totalSos: agg.totalSos,
-                unresolvedSos: agg.unresolvedSos,
-                lastIncidentAt: agg.lastIncidentAt,
-                riskScore: score,
-              );
-            })
-            .where(
-              (insight) => insight.totalSos >= 2 || insight.unresolvedSos > 0,
-            )
-            .toList()
-          ..sort((a, b) {
-            final byScore = b.riskScore.compareTo(a.riskScore);
-            if (byScore != 0) return byScore;
-            final byTotal = b.totalSos.compareTo(a.totalSos);
-            if (byTotal != 0) return byTotal;
-            return b.unresolvedSos.compareTo(a.unresolvedSos);
-          });
+    double? avgResponseMinutes;
+    if (responseTimes.isNotEmpty) {
+      final totalMinutes = responseTimes
+          .map((d) => d.inSeconds / 60.0)
+          .fold<double>(0, (a, b) => a + b);
+      avgResponseMinutes = totalMinutes / responseTimes.length;
+    }
 
-    final repeatEmergencyUsers = byUser.values
-        .where((agg) => agg.totalSos >= 2)
-        .length;
+    final byUser =
+        <String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>{};
+    for (final d in rolling30) {
+      final userId = (d.data()['uid'] ?? '').toString();
+      if (userId.isEmpty) continue;
+      byUser.putIfAbsent(userId, () => []).add(d);
+    }
+
+    final insights = <AdminRiskUserInsight>[];
+    var repeatEmergencyUsers = 0;
+    byUser.forEach((userId, docs) {
+      if (docs.length >= 2) {
+        repeatEmergencyUsers++;
+      }
+
+      var unresolved = 0;
+      DateTime? lastIncident;
+      String elderName = 'Unknown Elder';
+      for (final d in docs) {
+        final data = d.data();
+        final status = (data['status'] ?? 'pending').toString();
+        if (status != 'resolved') unresolved++;
+        final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+        if (createdAt != null &&
+            (lastIncident == null || createdAt.isAfter(lastIncident))) {
+          lastIncident = createdAt;
+        }
+        final name = (data['elderName'] ?? '').toString().trim();
+        if (name.isNotEmpty) elderName = name;
+      }
+
+      final total = docs.length;
+      var risk = total * 2 + unresolved * 3;
+      if (total >= 4) risk += 2;
+      if (total >= 2 || unresolved > 0) {
+        insights.add(
+          AdminRiskUserInsight(
+            uid: userId,
+            elderName: elderName,
+            totalSos: total,
+            unresolvedSos: unresolved,
+            riskScore: risk,
+            lastIncidentAt: lastIncident,
+          ),
+        );
+      }
+    });
+    insights.sort((a, b) => b.riskScore.compareTo(a.riskScore));
 
     return AdminSosAnalytics(
-      weekTotal: weekTotal,
-      monthTotal: monthTotal,
+      weekTotal: weekSos.length,
+      monthTotal: monthSos.length,
       resolvedCount: resolvedCount,
       pendingCount: pendingCount,
       inProgressCount: inProgressCount,
       avgResponseMinutes: avgResponseMinutes,
       repeatEmergencyUsers: repeatEmergencyUsers,
-      highRiskUsers: riskInsights.take(8).toList(),
+      highRiskUsers: insights.take(8).toList(),
     );
   }
 
@@ -571,16 +558,6 @@ class FirestoreService {
       'elderName': profile?['fullName'] ?? profile?['full_name'],
       'elderPhone': profile?['phoneNumber'],
     });
-
-    await _createNotificationLog(
-      recipientUid: uid,
-      eventType: 'medication_routine_created',
-      relatedRecord: ref,
-      title: 'Medication reminder saved',
-      body:
-          'Routine for ${medicineName.trim()} set at ${normalizedTimes.join(', ')}.',
-    );
-
     return ref;
   }
 
@@ -922,16 +899,6 @@ class FirestoreService {
   }
 
   String _timeKey(DateTime dt) {
-    return '${dt.hour.toString().padLeft(2, '0')}${dt.minute.toString().padLeft(2, '0')}';
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
-}
-
-class _RiskAggregate {
-  _RiskAggregate({required this.uid, required this.elderName});
-
-  final String uid;
-  String elderName;
-  int totalSos = 0;
-  int unresolvedSos = 0;
-  DateTime? lastIncidentAt;
 }

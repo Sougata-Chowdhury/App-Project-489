@@ -18,6 +18,21 @@ extension NearbyCategoryX on NearbyCategory {
       NearbyCategory.police => 'police',
     };
   }
+
+  List<String> get overpassFilters {
+    return switch (this) {
+      NearbyCategory.hospital => const [
+        '["amenity"="hospital"]',
+        '["healthcare"="hospital"]',
+        '["amenity"="clinic"]',
+      ],
+      NearbyCategory.pharmacy => const [
+        '["amenity"="pharmacy"]',
+        '["shop"="chemist"]',
+      ],
+      NearbyCategory.police => const ['["amenity"="police"]'],
+    };
+  }
 }
 
 class NearbyResource {

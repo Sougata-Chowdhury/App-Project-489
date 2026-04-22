@@ -12,6 +12,10 @@ class NearbyResourcesService {
   final http.Client _client;
   final Distance _distance = const Distance();
   final Map<String, _CacheEntry> _cache = {};
+  static const List<String> _overpassEndpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+  ];
 
   Future<List<NearbyResource>> fetchNearbyResources({
     required double latitude,
@@ -26,45 +30,12 @@ class NearbyResourcesService {
       return cached.items;
     }
 
-    final query =
-        '''
-[out:json][timeout:12];
-(
-  node["amenity"="${category.amenityTag}"](around:$radiusMeters,$latitude,$longitude);
-  way["amenity"="${category.amenityTag}"](around:$radiusMeters,$latitude,$longitude);
-  relation["amenity"="${category.amenityTag}"](around:$radiusMeters,$latitude,$longitude);
-);
-out center 60;
-''';
-
-    final response = await _client
-        .post(
-          Uri.parse('https://overpass-api.de/api/interpreter'),
-          headers: const {'Content-Type': 'application/x-www-form-urlencoded'},
-          body: 'data=${Uri.encodeQueryComponent(query)}',
-        )
-        .timeout(const Duration(seconds: 12));
-
-    if (response.statusCode != 200) {
-      throw Exception('Nearby search failed (${response.statusCode}).');
-    }
-
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    final elements = (payload['elements'] as List?) ?? const [];
-
-    final resources = elements
-        .whereType<Map>()
-        .map(
-          (e) => NearbyResource.fromOverpassElement(
-            raw: e.cast<String, dynamic>(),
-            category: category,
-            fromLatitude: latitude,
-            fromLongitude: longitude,
-            distance: _distance,
-          ),
-        )
-        .whereType<NearbyResource>()
-        .toList();
+    final resources = await _fetchWithFallback(
+      latitude: latitude,
+      longitude: longitude,
+      category: category,
+      radiusMeters: radiusMeters,
+    );
 
     final deduped = <String, NearbyResource>{};
     for (final r in resources) {
@@ -78,6 +49,96 @@ out center 60;
 
     _cache[cacheKey] = _CacheEntry(cachedAt: now, items: sorted);
     return sorted;
+  }
+
+  Future<List<NearbyResource>> _fetchWithFallback({
+    required double latitude,
+    required double longitude,
+    required NearbyCategory category,
+    required int radiusMeters,
+  }) async {
+    final radiuses = {radiusMeters, 6000, 10000}.toList()..sort();
+    Object? lastError;
+
+    for (final radius in radiuses) {
+      final query = _buildQuery(
+        latitude: latitude,
+        longitude: longitude,
+        category: category,
+        radiusMeters: radius,
+      );
+
+      for (final endpoint in _overpassEndpoints) {
+        try {
+          final response = await _client
+              .post(
+                Uri.parse(endpoint),
+                headers: const {
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                  'Accept': 'application/json',
+                  'User-Agent': 'ResponseForce/1.0 (NearbyResources)',
+                },
+                body: 'data=${Uri.encodeQueryComponent(query)}',
+              )
+              .timeout(const Duration(seconds: 25));
+
+          if (response.statusCode != 200) {
+            lastError = Exception(
+              'Nearby search failed (${response.statusCode}) on $endpoint',
+            );
+            continue;
+          }
+
+          final payload = jsonDecode(response.body) as Map<String, dynamic>;
+          final elements = (payload['elements'] as List?) ?? const [];
+          final items = elements
+              .whereType<Map>()
+              .map(
+                (e) => NearbyResource.fromOverpassElement(
+                  raw: e.cast<String, dynamic>(),
+                  category: category,
+                  fromLatitude: latitude,
+                  fromLongitude: longitude,
+                  distance: _distance,
+                ),
+              )
+              .whereType<NearbyResource>()
+              .toList();
+
+          if (items.isNotEmpty) return items;
+        } catch (e) {
+          lastError = e;
+        }
+      }
+    }
+
+    if (lastError != null) {
+      throw Exception('Nearby search unavailable right now. $lastError');
+    }
+    return const [];
+  }
+
+  String _buildQuery({
+    required double latitude,
+    required double longitude,
+    required NearbyCategory category,
+    required int radiusMeters,
+  }) {
+    final filters = category.overpassFilters;
+    final buffer = StringBuffer('[out:json][timeout:25];\n(\n');
+    for (final filter in filters) {
+      buffer.writeln(
+        '  node$filter(around:$radiusMeters,$latitude,$longitude);',
+      );
+      buffer.writeln(
+        '  way$filter(around:$radiusMeters,$latitude,$longitude);',
+      );
+      buffer.writeln(
+        '  relation$filter(around:$radiusMeters,$latitude,$longitude);',
+      );
+    }
+    buffer.write(');\nout center 100;');
+    return buffer.toString();
   }
 
   String _key(
